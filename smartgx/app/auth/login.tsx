@@ -1,67 +1,125 @@
-import { Link, router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { AuthField } from "../../src/components/auth/AuthForm";
+import { PrimaryButton } from "../../src/components/common/PrimaryButton";
 import { ScreenShell } from "../../src/components/common/ScreenShell";
-import { useAuthStore } from "../../src/store/authStore";
+import { SmartCard } from "../../src/components/common/SmartCard";
+import { validateLoginInput } from "../../src/features/auth/auth.rules";
+import { useAuth } from "../../src/hooks/useAuth";
 import { colors } from "../../src/theme/colors";
-import { radius } from "../../src/theme/radius";
 import { spacing } from "../../src/theme/spacing";
+import { typography } from "../../src/theme/typography";
 
 export default function LoginScreen() {
-  const login = useAuthStore((state) => state.login);
-  const [email, setEmail] = useState("aina@freshgrad.my");
-  const [password, setPassword] = useState("password123");
+  const { login, isAuthenticated } = useAuth();
+  const [emailOrMobile, setEmailOrMobile] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ emailOrMobile?: string; password?: string }>({});
+  const [formError, setFormError] = useState("");
+
+  if (isAuthenticated) {
+    return <Redirect href="/dashboard" />;
+  }
 
   const onLogin = () => {
-    const result = login({ email, password });
+    setFormError("");
+    const validation = validateLoginInput({ emailOrMobile, password });
+    setErrors(validation);
+    if (Object.keys(validation).length > 0) return;
+
+    const result = login({ emailOrMobile, password });
     if (!result.ok) {
-      Alert.alert("Login failed", result.message);
+      setFormError(result.message ?? "Login failed.");
       return;
     }
-    router.replace("/dashboard");
+    if (result.nextRoute) {
+      router.replace(result.nextRoute as never);
+    }
   };
 
   return (
-    <ScreenShell title="SmartGX" subtitle="AI-powered financial resilience for GXBank users">
-      <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" />
-      <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
-      <Pressable style={styles.button} onPress={onLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </Pressable>
-      <Pressable style={styles.secondaryButton} onPress={onLogin}>
-        <Text style={styles.secondaryText}>Use Fresh Grad Demo Account</Text>
-      </Pressable>
-      <View style={styles.row}>
-        <Link href="/auth/register" style={styles.link}>Create account</Link>
-        <Link href="/auth/onboarding" style={styles.link}>Onboarding</Link>
+    <ScreenShell>
+      <View style={styles.container}>
+        <View style={styles.hero}>
+          <View style={styles.logoRow}>
+            <View style={styles.logoDot} />
+            <Text style={styles.logoText}>SmartGX</Text>
+          </View>
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>
+            Sign in to continue your financial resilience journey.
+          </Text>
+        </View>
+
+        <SmartCard>
+          <AuthField
+            label="Email or Mobile Number"
+            value={emailOrMobile}
+            onChangeText={setEmailOrMobile}
+            keyboardType="email-address"
+            placeholder="you@example.com or +60123456789"
+            error={errors.emailOrMobile}
+          />
+          <AuthField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholder="At least 8 characters"
+            error={errors.password}
+          />
+          <Text onPress={() => router.push("/auth/forgot-password")} style={styles.forgotLink}>
+            Forgot password?
+          </Text>
+          {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+          <PrimaryButton label="Login" onPress={onLogin} />
+        </SmartCard>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>New to SmartGX?</Text>
+          <Text onPress={() => router.push("/auth/register")} style={styles.link}>
+            Create Account
+          </Text>
+        </View>
+
+        <SmartCard>
+          <Text style={styles.hintTitle}>Test Accounts</Text>
+          <Text style={styles.hintBody}>
+            Student: <Text style={styles.hintCode}>jason@student.my</Text>{"\n"}
+            Fresh Graduate: <Text style={styles.hintCode}>aina@freshgrad.my</Text>{"\n"}
+            Password: <Text style={styles.hintCode}>password123</Text>
+          </Text>
+        </SmartCard>
       </View>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
+  container: { gap: spacing.lg },
+  hero: { gap: spacing.sm },
+  logoRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  logoDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: colors.aiInsight },
+  logoText: {
+    color: colors.aiInsight,
+    fontWeight: "800",
+    fontSize: typography.caption,
+    letterSpacing: 1.2,
   },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  title: { color: colors.textPrimary, fontWeight: "800", fontSize: typography.title },
+  subtitle: { color: colors.textSecondary, lineHeight: 20 },
+  forgotLink: { color: colors.aiInsight, fontWeight: "600", textAlign: "right" },
+  formError: { color: colors.danger, fontWeight: "600" },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
     alignItems: "center",
   },
-  buttonText: { color: "#FFF", fontWeight: "700" },
-  secondaryButton: {
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    padding: spacing.md,
-    alignItems: "center",
-  },
-  secondaryText: { color: colors.primary, fontWeight: "600" },
-  row: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing.sm },
-  link: { color: colors.aiInsight, fontWeight: "600" },
+  footerText: { color: colors.textSecondary },
+  link: { color: colors.aiInsight, fontWeight: "700" },
+  hintTitle: { color: colors.warning, fontWeight: "700" },
+  hintBody: { color: colors.textSecondary, lineHeight: 22 },
+  hintCode: { color: colors.aiInsight, fontWeight: "700" },
 });
