@@ -1,4 +1,4 @@
-# SmartGX
+# 💎🥇SmartGX🥇💎
 
 SmartGX is an AI-powered financial resilience banking prototype built on top of the GXBank digital banking experience. It is designed for Malaysian youth and helps users save consistently, spend consciously, borrow responsibly, and stay protected through automation, AI nudges, gamification, debt prevention, and security features.
 
