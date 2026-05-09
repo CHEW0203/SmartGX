@@ -1,14 +1,18 @@
 # SmartGX
 
-SmartGX is an AI-powered behavioural financial resilience mobile app prototype built as a proposed enhancement layer on top of GXBank Malaysia.
+SmartGX is an AI-powered financial resilience banking prototype built on top of the GXBank digital banking experience. It is designed for Malaysian youth and helps users save consistently, spend consciously, borrow responsibly, and stay protected through automation, AI nudges, gamification, debt prevention, and security features.
 
-It is designed for Malaysian tertiary students, fresh graduates, and early-career workers who understand the importance of saving but struggle to turn financial awareness into consistent financial action.
-
-SmartGX does not replace GXBank. Instead, it demonstrates how GXBank’s existing digital banking ecosystem can be enhanced with AI, behavioural economics, automation, gamification, and security awareness to help young users save automatically, control spending, avoid debt, and build long-term financial resilience.
+SmartGX extends GXBank’s digital banking foundation by adding a proactive financial behaviour layer that guides users before they overspend, overborrow, or face financial risk.
 
 ---
 
-## Project Context
+## 🚀 One-Line Pitch
+
+**SmartGX builds on the GXBank digital banking experience with AI-powered financial resilience features that help young Malaysians save before spending, think before borrowing, and stay protected before risk happens.**
+
+---
+
+## 📌 Project Context
 
 This project is developed for the **Youth Resilience Challenge** case study.
 
@@ -20,7 +24,7 @@ SmartGX addresses this gap by turning banking from a passive storage and transac
 
 ---
 
-## Core Idea
+## 💡 Core Idea
 
 ```text
 SmartGX makes financial resilience the default behaviour for Malaysian youth.
@@ -39,7 +43,7 @@ Instead of only showing users what happened after they spent money, SmartGX acti
 
 ---
 
-## Product Positioning
+## 🎯 Product Positioning
 
 SmartGX is:
 
@@ -59,7 +63,7 @@ SmartGX is not:
 
 ---
 
-## Target Users
+## 👥 Target Users
 
 SmartGX is designed for:
 
@@ -72,443 +76,568 @@ SmartGX is designed for:
 
 ---
 
-## Key Features
+## ❗ Problem Statement
 
-### 1. AI Financial Health Score
+Many students and young adults understand the importance of saving and budgeting, but struggle to build consistent financial habits.
 
-SmartGX calculates a financial health score based on:
+Common issues include:
 
-- savings rate
-- spending control
-- debt risk
-- emergency fund progress
-- security behaviour
+- weak saving discipline after receiving income
+- impulsive spending
+- poor cashflow awareness
+- overuse of credit or future money
+- lack of real-time guidance before risky transactions
+- low motivation to maintain good financial habits
+- security risks such as scams, weak PINs, and suspicious activity
 
-The score gives users a quick view of their financial condition and provides AI-style recommendations.
-
----
-
-### 2. Salary Auto Allocation
-
-When salary or income is received, SmartGX automatically allocates it into different financial buckets.
-
-Example:
-
-```text
-RM3000 Salary
-60% Spending Wallet = RM1800
-20% Bonus Pocket = RM600
-10% Emergency Fund = RM300
-10% Goal Savings = RM300
-```
-
-This reduces reliance on user discipline and makes saving the default behaviour.
+SmartGX addresses these problems by guiding users before, during, and after important financial decisions.
 
 ---
 
-### 3. Manual Income Allocation
+## 💡 Solution Overview
 
-SmartGX also supports users who receive cash income, part-time salary, allowance, or family support.
+SmartGX is designed as an AI-powered financial resilience layer built on top of GXBank’s digital banking experience.
 
-Users can manually add income, and SmartGX can apply the same automatic allocation rule.
+While GXBank provides the core digital banking foundation such as account management, transfers, card usage, savings, and FlexiCredit, SmartGX enhances the experience with AI-driven financial behaviour support.
 
----
+Instead of only showing balances and transactions, SmartGX helps users answer:
 
-### 4. Round-up Savings
+- Can I afford this transaction?
+- Is this financial action risky?
+- Should I save instead?
+- Am I borrowing responsibly?
+- How can I improve my financial health?
 
-SmartGX can round up spending and save the difference automatically.
-
-Example:
-
-```text
-User spends RM12.40
-SmartGX rounds it up to RM13.00
-RM0.60 goes to savings
-```
+SmartGX focuses on helping young users make better financial decisions before risk happens.
 
 ---
 
-### 5. AI Behavioural Nudges
+## ✨ Key Features
 
-SmartGX provides contextual and actionable nudges based on user behaviour.
-
-Example:
-
-```text
-Your food spending is 38% higher than your weekly average.
-If you limit food delivery to RM25 for the next 3 days, your cashflow will stay safe until payday.
-```
-
-The goal is to move beyond generic financial advice and provide guidance that is relevant to the user’s current situation.
-
----
-
-### 6. Soft Friction
-
-SmartGX does not hard block spending by default.
-
-Instead, it uses behavioural nudges and soft friction, such as:
-
-- spending warnings
-- confirmation prompts
-- delay purchase options
-- impact preview on month-end balance
-- option to move money into savings instead
-
-This preserves user freedom while encouraging better financial decisions.
+- **Dashboard** with account overview, quick actions, latest activity, GXHealth, campaigns, and Money Tree
+- **Saving & Automation** with Bonus, Emergency, Goals, auto allocation, round-up saving, daily interest estimate, and saving withdrawal
+- **GXHealth** financial health score with AI-ready analysis and recommendations
+- **Transaction Intelligence** with income and expense tracking, charts, forecasts, and SmartGX insights
+- **AI Nudge & Soft Friction** for risky payments, transfers, credit usage, and borrowing
+- **FlexiCredit Debt Prevention** with eligibility check, document flow, AI Debt Readiness, drawdown, repayment, and interest calculation
+- **Gamification** with Saving Streak, SmartScore leaderboard, missions, water system, and Money Tree
+- **Campaigns** such as saving challenges, round-up challenges, and debt-free campaigns
+- **Security Center** with 6-digit PIN setup, Device Safety Check, Scam Protection, and Emergency Lock
+- **SmartGX Assistant** with quick questions and AI-powered prompt support
 
 ---
 
-### 7. Debt Risk Detection
+## 🛠️ Tech Stack
 
-SmartGX includes a debt prevention layer that detects:
-
-- high credit usage
-- BNPL-like spending
-- repeated borrowing behaviour
-- low remaining balance
-- risky FlexiCredit-style usage
-
-The system warns users before they become dependent on future money.
-
----
-
-### 8. Future Money Blocker
-
-Future Money Blocker is a key SmartGX feature that warns users when they are about to rely on money they do not currently have.
-
-Example:
-
-```text
-You are about to use future money.
-SmartGX recommends using available balance or delaying this purchase to avoid debt risk.
-```
-
----
-
-### 9. Gamification and Rewards
-
-SmartGX uses gamification to encourage long-term habit formation.
-
-Features include:
-
-- saving streaks
-- badges
-- weekly missions
-- milestone rewards
-- leaderboard
-- friend challenges
-
-Example badges:
-
-- First Auto Save
-- 7-Day Saving Streak
-- No Overspend Week
-- Emergency Fund Builder
-- Debt Defender
-- Scam Aware Banker
-
----
-
-### 10. Campaigns
-
-SmartGX proposes financial resilience campaigns that encourage healthy behaviour instead of only promoting spending.
-
-Example campaigns:
-
-- RM5 Daily Save Challenge
-- No Overspend Week
-- Emergency Fund Sprint
-- Round-up Booster
-- Debt-Free Month
-- Safe Banking Challenge
-
----
-
-### 11. Security and Anti-Malware Awareness
-
-SmartGX also includes a supporting security module because financial resilience includes protecting money from scams and unsafe banking behaviour.
-
-Features include:
-
-- Security Score
-- scam-risk warning
-- suspicious transaction alert
-- safe banking checklist
-- anti-malware tips
-- Cyber Fraud Protect awareness
-
----
-
-## GXBank Product Foundation
-
-SmartGX is designed as an enhancement to GXBank’s existing product ecosystem.
-
-The prototype simulates improvements to:
-
-- GX Account / Savings Account
-- GX Card / Debit Card
-- Bonus Pocket
-- FlexiCredit / borrowing risk
-- Rewards
-- Campaigns
-- Cyber Fraud Protect / Security / Anti-Malware
-
----
-
-## Main Demo Flow
-
-The intended demo story is:
-
-1. User logs in as a fresh graduate.
-2. Dashboard shows RM3000 salary received.
-3. SmartGX automatically allocates:
-   - RM1800 to Spending Wallet
-   - RM600 to Bonus Pocket
-   - RM300 to Emergency Fund
-   - RM300 to Goal Savings
-4. User views GX Card transactions.
-5. SmartGX detects risky spending.
-6. AI nudge appears.
-7. Soft friction modal appears.
-8. User checks Debt Risk screen.
-9. Future Money Blocker appears.
-10. User checks Rewards.
-11. Saving streak, badges, missions, and leaderboard are shown.
-12. User checks Campaigns.
-13. No Overspend Week is recommended.
-14. User checks Security.
-15. Scam-risk and anti-malware reminders are shown.
-
----
-
-## Tech Stack
-
-SmartGX is built using:
+### Mobile App
 
 - React Native
 - Expo
 - TypeScript
 - Expo Router
-- Zustand
-- Mock data
-- Supabase-ready architecture
-- Mock authentication
+- Supabase
+- Expo SecureStore
+
+### AI Server
+
+- Node.js
+- Express
+- Gemini API
+- Local AI proxy server
+- Rule-based fallback logic
 
 ---
 
-## Why React Native Expo?
-
-SmartGX is a mobile banking prototype, so a mobile-first framework is more suitable than a web-first framework.
-
-Expo is used because it allows fast mobile app development and quick testing through Expo Go.
-
----
-
-## Why Not Next.js?
-
-Next.js is suitable for web applications and dashboards.
-
-SmartGX is intended to feel like a mobile banking feature inside GXBank, so React Native Expo is more appropriate for this prototype.
-
----
-
-## Current Development Status
-
-This repository is currently in early development.
-
-The project is being built phase by phase.
-
-Initial focus:
-
-- project setup
-- folder structure
-- theme files
-- mock data
-- authentication
-- dashboard
-- financial health score
-- savings automation
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```text
-smartgx/
+SMARTGX/
+├── smartgx/                     # Expo mobile app
+│   ├── app/                     # App routes and screens
+│   ├── assets/                  # Images and static assets
+│   ├── src/                     # Components, services, stores, and utilities
+│   ├── supabase/                # Supabase schema / database setup
+│   ├── .env                     # Local Expo environment variables
+│   ├── .env.example             # Expo environment variable template
+│   ├── .gitignore
+│   ├── app.json
+│   ├── App.tsx
+│   ├── index.ts
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── README.md
+│   └── tsconfig.json
 │
-├── app/
-│   ├── _layout.tsx
-│   ├── index.tsx
-│   ├── auth/
-│   ├── dashboard.tsx
-│   ├── transactions.tsx
-│   ├── savings.tsx
-│   ├── rewards.tsx
-│   ├── campaigns.tsx
-│   ├── debt-risk.tsx
-│   ├── security.tsx
-│   └── profile.tsx
+├── smartgx-ai-server/           # Local AI backend server
+│   ├── src/                     # AI provider / AI service logic
+│   ├── .env                     # Local AI server environment variables
+│   ├── .env.example             # AI server environment variable template
+│   ├── .gitignore
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── README.md
+│   ├── server.ts
+│   └── tsconfig.json
 │
-├── src/
-│   ├── components/
-│   ├── features/
-│   ├── data/
-│   ├── lib/
-│   ├── hooks/
-│   ├── store/
-│   ├── theme/
-│   └── types/
-│
-├── assets/
-├── PROJECT_BRIEF.md
-├── TODO.md
-├── .env.example
-├── app.json
-├── package.json
-├── tsconfig.json
+├── LICENSE
+├── package-lock.json
 └── README.md
 ```
 
+The Expo app root is:
+
+```text
+SMARTGX/smartgx
+```
+
+The AI server root is:
+
+```text
+SMARTGX/smartgx-ai-server
+```
+
 ---
 
-## Installation
+## ⚙️ Environment Setup
 
-Clone the repository:
+SmartGX has two parts:
+
+1. **Expo mobile app**
+2. **AI server**
+
+You need to configure both if you want to test the full AI experience.
+
+---
+
+# Part 1: Expo App Setup
+
+## 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/your-username/SmartGX.git
+cd SmartGX
+```
+
+## 2. Go to the Expo app folder
+
+```bash
 cd smartgx
 ```
 
-Install dependencies:
+## 3. Install dependencies
 
 ```bash
 npm install
 ```
 
-Start the Expo development server:
+## 4. Create `.env`
+
+Copy the example environment file:
 
 ```bash
-npx expo start
+cp .env.example .env
 ```
 
----
+For Windows PowerShell:
 
-## Running the App
-
-### Using Expo Go
-
-1. Install Expo Go on your iOS or Android device.
-2. Run:
-
-```bash
-npx expo start
+```powershell
+Copy-Item .env.example .env
 ```
 
-3. Scan the QR code using:
-   - iPhone Camera app
-   - Expo Go scanner on Android
-
-### Using Web Preview
-
-If web dependencies are installed, run:
-
-```bash
-npx expo start
-```
-
-Then press:
+Then fill in the required values inside:
 
 ```text
-w
+SMARTGX/smartgx/.env
 ```
 
-Note: SmartGX is designed as a mobile app, so mobile preview is recommended.
+Example:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
+```
+
+> Do not commit `.env` to GitHub.
 
 ---
 
-## Environment Variables
+# Part 2: AI Server Setup
 
-Create a `.env.example` file:
+SmartGX uses a local AI server so the Gemini API key is not exposed inside the Expo mobile app.
+
+The AI flow is:
+
+```text
+SmartGX Expo App
+→ smartgx-ai-server
+→ Gemini API
+```
+
+## 1. Open a new terminal
+
+From the root folder:
+
+```bash
+cd smartgx-ai-server
+```
+
+## 2. Install dependencies
+
+```bash
+npm install
+```
+
+## 3. Create `.env`
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+For Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then fill in:
+
+```text
+SMARTGX/smartgx-ai-server/.env
+```
+
+Example:
 
 ```env
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL_DEFAULT=gemini-2.5-flash
+GEMINI_MODEL_DEEP=gemini-2.5-pro
+PORT=3001
+```
+
+> Do not put `GEMINI_API_KEY` inside the Expo app `.env`.
+
+Wrong:
+
+```env
+EXPO_PUBLIC_GEMINI_API_KEY=your_key
+```
+
+Correct:
+
+```env
+GEMINI_API_KEY=your_key
+```
+
+inside:
+
+```text
+SMARTGX/smartgx-ai-server/.env
+```
+
+---
+
+## ▶️ Running the Project
+
+You need **two terminals**.
+
+---
+
+## Terminal 1: Start AI Server
+
+```bash
+cd smartgx-ai-server
+npm run dev
+```
+
+The AI server should run on:
+
+```text
+http://localhost:3001
+```
+
+To check if the AI server is running, open:
+
+```text
+http://localhost:3001/health
+```
+
+Expected response:
+
+```json
+{
+  "ok": true,
+  "service": "SmartGX AI",
+  "geminiKeyConfigured": true
+}
+```
+
+If `geminiKeyConfigured` is `false`, check that:
+
+- `smartgx-ai-server/.env` exists
+- `GEMINI_API_KEY` is added
+- the AI server was restarted after editing `.env`
+
+---
+
+## Terminal 2: Start Expo App
+
+```bash
+cd smartgx
+npx expo start --clear
+```
+
+Run on Android emulator:
+
+```bash
+press a
+```
+
+Or scan the Expo QR code using a physical phone.
+
+---
+
+## 📲 Running on a Physical Phone
+
+If you test on a real phone, `localhost` will not work because the phone cannot access your computer’s localhost.
+
+You must use your computer’s Wi-Fi IP address.
+
+---
+
+## 1. Find your computer IP address
+
+On Windows PowerShell:
+
+```powershell
+ipconfig
+```
+
+Find:
+
+```text
+Wireless LAN adapter Wi-Fi
+IPv4 Address . . . . . . . . . . : 192.168.x.x
+```
+
+Example:
+
+```text
+IPv4 Address: 192.168.1.25
+```
+
+---
+
+## 2. Update Expo app `.env`
+
+Open:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+Change:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
+```
+
+to:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://192.168.1.25:3001/api/ai
+```
+
+Use your own computer IP address.
+
+---
+
+## 3. Restart Expo
+
+After changing `.env`, restart Expo:
+
+```bash
+npx expo start --clear
+```
+
+Your phone and computer must be connected to the same Wi-Fi network.
+
+---
+
+## 🧪 Testing AI Connection
+
+## 1. Test inside the app
+
+Open **SmartGX Assistant** and ask:
+
+```text
+What is GXHealth?
+```
+
+If AI is connected, the response should come from Gemini.
+
+If AI is not connected, SmartGX will use fallback logic.
+
+---
+
+## 🔐 Supabase Setup
+
+SmartGX uses Supabase for:
+
+- authentication
+- persistent user session
+- user profile
+- account balance
+- transactions
+- savings
+- notifications
+- GXHealth
+- FlexiCredit data
+- gamification progress
+- security settings
+
+The Supabase environment variables should be placed in:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+SmartGX supports two Supabase setup options.
+
+---
+
+### Option 1: Use the default hosted Supabase project
+
+For quick hackathon testing, reviewers may use the default hosted Supabase configuration provided in `.env.example`.
+
+This allows the app to run without setting up a new Supabase project.
+
+Example:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://ouqhyjildwfktughxrfj.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_gYlSoU1N8Fwnyp3lQQ0cbw_VdvY5lbd
+```
+
+Then run:
+
+```bash
+cp .env.example .env
+```
+
+For Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+After that, start the app normally.
+
+---
+
+### Option 2: Use your own Supabase project
+
+If you prefer to use your own database:
+
+1. Create a Supabase project.
+2. Run the SQL schema inside:
+
+```text
+SMARTGX/smartgx/supabase/
+```
+
+3. Copy `.env.example` to `.env`.
+4. Replace the Supabase values with your own project URL and anon key.
+
+Example:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-The MVP should run with mock data even without real Supabase credentials.
+---
+
+> Only use the Supabase anon / publishable key in the Expo app.  
+> Do not expose any Supabase service role key.
 
 ---
 
-## Demo Accounts
+## 🧠 AI Features
 
-```text
-Student:
-Email: jason@student.my
-Password: password123
+SmartGX uses AI for:
 
-Fresh Graduate:
-Email: aina@freshgrad.my
-Password: password123
-```
+- SmartGX Assistant
+- GXHealth analysis
+- Transaction insight and month-end forecast
+- AI Nudge explanation
+- Critical risk reason analysis
+- Income classification
+- FlexiCredit Debt Readiness Review
+- Scam Protection
+- Security Recommendation
+- Money Tree health explanation
+- Mission Recommendation
+- SmartScore explanation
 
----
-
-## Development Approach
-
-SmartGX should be developed phase by phase.
-
-Main phases:
-
-1. Project setup
-2. Folder structure, theme, types, and mock data
-3. Authentication and navigation
-4. Dashboard MVP
-5. Financial Health Score engine
-6. Savings and automation
-7. Transactions and GX Card spending
-8. AI nudges and soft friction
-9. Debt prevention and FlexiCredit risk
-10. Rewards and gamification
-11. Campaigns
-12. Security and anti-malware awareness
-13. Profile and settings
-14. Demo flow integration
-15. UI polish and final testing
+If Gemini is unavailable, SmartGX falls back to local rule-based logic.
 
 ---
 
-## Important Development Rules
+## 🧪 Recommended Demo Flow
 
-- Use TypeScript.
-- Use React Native Expo.
-- Use Expo Router.
-- Use Zustand for state management.
-- Use mock data first.
-- Keep the app Supabase-ready.
-- Do not require real GXBank API.
-- Do not require real payment integration.
-- Do not build a real lending system.
-- Do not hard block spending by default.
-- Use soft friction and behavioural nudges.
-- Keep business logic separate from UI.
-- Prioritise a working hackathon demo over production completeness.
+1. Register or login
+2. Set up 6-digit PIN
+3. Show Dashboard overview
+4. Receive Income
+5. Show Auto Allocation in Saving
+6. Perform a risky payment or transfer
+7. Show AI Nudge and Soft Friction
+8. Show Transaction AI forecast
+9. Show FlexiCredit Debt Readiness
+10. Show Saving Streak, Money Tree, and Leaderboard
+11. Show Security Center
 
 ---
 
-## Disclaimer
+## 📌 Case Study Impact
 
-SmartGX is a hackathon prototype and conceptual product proposal.
+SmartGX helps young users:
 
-It does not represent an official GXBank product.
-
-It does not process real banking transactions, real payments, real credit applications, or real user financial data.
-
-All financial data used in the prototype should be mock data for demonstration purposes only.
+- save automatically
+- build emergency savings
+- understand spending behaviour
+- avoid impulsive transactions
+- reduce risky credit usage
+- borrow more responsibly
+- stay motivated through rewards
+- protect their account from scams and security risks
 
 ---
 
-## License
+## 🏆 Why SmartGX Stands Out
 
-This project is currently for hackathon and educational use.
+| Normal Banking App | SmartGX |
+|---|---|
+| Shows balance | Explains financial health |
+| Shows transactions | Analyzes financial behaviour |
+| Allows transfer | Checks risk before transfer |
+| Offers credit | Evaluates debt readiness |
+| Basic rewards | Saving Streak, Money Tree, SmartScore |
+| Basic security | Security Center and Scam Protection |
+
+---
+
+## 👥 Team
+
+**SmartGX Team**
+
+---
+
+## 📄 License
+
+This project is developed for hackathon, academic, and prototype demonstration purposes.
+message.txt
+16 KB
