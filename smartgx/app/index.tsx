@@ -1,22 +1,22 @@
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, StatusBar, StyleSheet, Text, View } from "react-native";
-import { useAuth } from "../src/hooks/useAuth";
+import "react-native-url-polyfill/auto";
+import { resolveLoginRoute } from "../src/features/auth/auth.service";
+import { initializeAuthSession, waitForAuthHydration } from "../src/services/db/authSession";
+import { useAuthStore } from "../src/store/authStore";
 import { colors } from "../src/theme/colors";
 import { spacing } from "../src/theme/spacing";
 import { typography } from "../src/theme/typography";
 
 export default function SplashScreen() {
-  const { isAuthenticated } = useAuth();
   const containerOpacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.68)).current;
   const subtitleOpacity = useRef(new Animated.Value(0)).current;
   const glowOpacity = useRef(new Animated.Value(0.12)).current;
 
   useEffect(() => {
-    const dest: "/dashboard" | "/auth/register" = isAuthenticated
-      ? "/dashboard"
-      : "/auth/register";
+    void initializeAuthSession();
 
     Animated.sequence([
       Animated.parallel([
@@ -44,9 +44,18 @@ export default function SplashScreen() {
       }),
       Animated.delay(1800),
     ]).start(() => {
-      router.replace(dest);
+      void (async () => {
+        await waitForAuthHydration();
+        const { isAuthenticated, currentUser } = useAuthStore.getState();
+        const dest =
+          !isAuthenticated
+            ? "/auth/register"
+            : currentUser
+              ? resolveLoginRoute(currentUser)
+              : "/auth/register";
+        router.replace(dest);
+      })();
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -77,10 +86,7 @@ export default function SplashScreen() {
         </Animated.View>
       </Animated.View>
 
-      {/* Bottom version label */}
-      <Animated.Text style={[styles.version, { opacity: subtitleOpacity }]}>
-        Prototype · v0.2
-      </Animated.Text>
+      <Animated.Text style={[styles.version, { opacity: subtitleOpacity }]}>SmartGX</Animated.Text>
     </View>
   );
 }

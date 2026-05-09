@@ -1,9 +1,10 @@
-export type IncomeType = "salary" | "allowance" | "part_time" | "cash_income";
+export type IncomeType = "salary" | "allowance" | "part_time" | "freelance_income" | "cash_income";
 
 export const INCOME_TYPE_LABELS: Record<IncomeType, string> = {
   salary:      "Salary",
   allowance:   "Allowance",
   part_time:   "Part-time",
+  freelance_income: "Freelance Income",
   cash_income: "Cash Income",
 };
 
@@ -71,7 +72,8 @@ export interface SavingsActivity {
   pocket: string;
   amount: number;
   date:   string;
-  type:   "auto" | "manual" | "roundup" | "goal";
+  occurredAt?: string;
+  type:   "auto" | "manual" | "roundup" | "goal" | "withdrawal";
 }
 
 /** One savings goal record */

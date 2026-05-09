@@ -14,6 +14,8 @@ export const useAuth = () => {
   const completeFinancialProfile = useAuthStore((s) => s.completeFinancialProfile);
   const completeSmartGXSetup = useAuthStore((s) => s.completeSmartGXSetup);
   const completeSecuritySetup = useAuthStore((s) => s.completeSecuritySetup);
+  const setAppPasscode = useAuthStore((s) => s.setAppPasscode);
+  const changeAppPasscode = useAuthStore((s) => s.changeAppPasscode);
   const activateDemoAccount = useAuthStore((s) => s.activateDemoAccount);
 
   return {
@@ -30,6 +32,8 @@ export const useAuth = () => {
     completeFinancialProfile,
     completeSmartGXSetup,
     completeSecuritySetup,
+    setAppPasscode,
+    changeAppPasscode,
     activateDemoAccount,
   };
 };

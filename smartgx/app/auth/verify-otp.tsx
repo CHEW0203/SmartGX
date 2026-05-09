@@ -73,10 +73,9 @@ export default function VerifyOtpScreen() {
         </SmartCard>
 
         <SmartCard>
-          <Text style={styles.disclaimerTitle}>Prototype Mode</Text>
+          <Text style={styles.disclaimerTitle}>Did not receive a code?</Text>
           <Text style={styles.disclaimerBody}>
-            This OTP is simulated. No real SMS is sent.{"\n"}
-            Enter <Text style={styles.highlight}>123456</Text> to proceed.
+            Tap Resend OTP. If it still does not arrive, check your mobile number and try again.
           </Text>
         </SmartCard>
       </View>

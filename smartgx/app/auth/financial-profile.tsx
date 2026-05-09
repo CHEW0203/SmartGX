@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AuthField } from "../../src/components/auth/AuthForm";
 import { StepHeader } from "../../src/components/auth/StepHeader";
@@ -7,12 +7,13 @@ import { PrimaryButton } from "../../src/components/common/PrimaryButton";
 import { ScreenShell } from "../../src/components/common/ScreenShell";
 import { SmartCard } from "../../src/components/common/SmartCard";
 import type {
+  EmploymentStatus,
   FinancialProfile,
-  IncomeType,
   SavingGoal,
   SpendingCategory,
   UserType,
 } from "../../src/features/auth/auth.types";
+import { employmentStatusToIncomeType } from "../../src/features/auth/auth.types";
 import { getOnboardingRoute, STEP } from "../../src/features/auth/onboarding.route";
 import { useAuth } from "../../src/hooks/useAuth";
 import { formatRM } from "../../src/lib/currency";
@@ -27,11 +28,14 @@ const USER_TYPES: { label: string; value: UserType }[] = [
   { label: "Early-Career", value: "early_career" },
 ];
 
-const INCOME_TYPES: { label: string; value: IncomeType }[] = [
-  { label: "Allowance", value: "allowance" },
+const EMPLOYMENT: { label: string; value: EmploymentStatus }[] = [
+  { label: "Student", value: "student" },
+  { label: "Unemployed", value: "unemployed" },
   { label: "Part-time", value: "part_time" },
-  { label: "Salary", value: "salary" },
-  { label: "Cash Income", value: "cash_income" },
+  { label: "Full-time", value: "full_time" },
+  { label: "Self-employed", value: "self_employed" },
+  { label: "Business Owner", value: "business_owner" },
+  { label: "Other", value: "other" },
 ];
 
 const SPENDING_CATS: { label: string; value: SpendingCategory }[] = [
@@ -52,14 +56,35 @@ const SAVING_GOALS: { label: string; value: SavingGoal }[] = [
   { label: "Debt Repayment", value: "debt_repayment" },
 ];
 
+function defaultEmployment(userType: UserType): EmploymentStatus {
+  if (userType === "student") return "student";
+  if (userType === "fresh_graduate") return "unemployed";
+  return "full_time";
+}
+
+/** Allow empty -> 0, or decimals; reject letters/symbols like "abc" or "1,200". */
+function parseMonthlyIncomeRm(raw: string): { ok: true; value: number } | { ok: false; message: string } {
+  const t = raw.trim();
+  if (t === "") return { ok: true, value: 0 };
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(t)) return { ok: false, message: "Enter numbers only for income (e.g. 1200 or 1200.50)." };
+  const n = Number(t);
+  if (Number.isNaN(n)) return { ok: false, message: "Income must be a valid number." };
+  if (n < 0) return { ok: false, message: "Income cannot be negative." };
+  return { ok: true, value: Math.round(n * 100) / 100 };
+}
+
 export default function FinancialProfileScreen() {
   const { currentUser, completeFinancialProfile } = useAuth();
   const [userType, setUserType] = useState<UserType>("student");
-  const [incomeType, setIncomeType] = useState<IncomeType>("allowance");
+  const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>("student");
   const [monthlyIncome, setMonthlyIncome] = useState("");
   const [spendingCategories, setSpendingCategories] = useState<SpendingCategory[]>([]);
   const [savingGoal, setSavingGoal] = useState<SavingGoal>("emergency_fund");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setEmploymentStatus(defaultEmployment(userType));
+  }, [userType]);
 
   if (!currentUser) return <Redirect href="/auth/login" />;
   if (currentUser.onboardingStep !== STEP.FINANCIAL_PROFILE) {
@@ -73,16 +98,18 @@ export default function FinancialProfileScreen() {
   };
 
   const onContinue = () => {
-    const income = Number(monthlyIncome) || 0;
-    if (income <= 0) {
-      setError("Please enter your monthly income or allowance.");
+    const parsed = parseMonthlyIncomeRm(monthlyIncome);
+    if (!parsed.ok) {
+      setError(parsed.message);
       return;
     }
     setError("");
+    const derivedIncomeType = employmentStatusToIncomeType(employmentStatus);
     const profile: FinancialProfile = {
       userType,
-      incomeType,
-      monthlyIncome: income,
+      employmentStatus,
+      incomeType: derivedIncomeType,
+      monthlyIncome: parsed.value,
       spendingCategories,
       primarySavingGoal: savingGoal,
       allocationAccepted: true,
@@ -99,8 +126,7 @@ export default function FinancialProfileScreen() {
         <View style={styles.heading}>
           <Text style={styles.title}>Financial Profile</Text>
           <Text style={styles.subtitle}>
-            Help SmartGX understand your financial situation so it can personalise AI guidance
-            for your spending, saving, and debt prevention.
+            Help SmartGX understand your situation so AI guidance fits your saving, spending, and debt avoidance goals.
           </Text>
         </View>
 
@@ -112,18 +138,28 @@ export default function FinancialProfileScreen() {
             onSelect={setUserType}
           />
           <ChipGroup
-            label="My income type"
-            options={INCOME_TYPES}
-            value={incomeType}
-            onSelect={setIncomeType}
+            label="Employment status"
+            options={EMPLOYMENT}
+            value={employmentStatus}
+            onSelect={setEmploymentStatus}
           />
           <AuthField
-            label="Monthly income or allowance (RM)"
+            label="Monthly income (RM) — optional"
             value={monthlyIncome}
-            onChangeText={setMonthlyIncome}
+            onChangeText={(t) => {
+              setMonthlyIncome(t);
+              if (error) setError("");
+            }}
             keyboardType="numeric"
-            placeholder="e.g. 1200"
-            helperText={Number(monthlyIncome) > 0 ? `Amount: ${formatRM(Number(monthlyIncome))}` : undefined}
+            placeholder="Leave blank if you have no steady income yet"
+            helperText={
+              monthlyIncome.trim()
+                ? (() => {
+                    const r = parseMonthlyIncomeRm(monthlyIncome);
+                    return r.ok && r.value > 0 ? `Amount: ${formatRM(r.value)}` : undefined;
+                  })()
+                : "Defaults to RM0 until you enter an amount."
+            }
             error={error}
           />
         </SmartCard>

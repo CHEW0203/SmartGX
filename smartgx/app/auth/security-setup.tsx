@@ -96,7 +96,7 @@ export default function SecuritySetupScreen() {
             <View style={styles.biometricText}>
               <Text style={styles.biometricTitle}>Biometric Login</Text>
               <Text style={styles.biometricDesc}>
-                Use fingerprint or Face ID to log in quickly. Simulated in this prototype.
+                Use fingerprint or Face ID to sign in faster when your device supports it.
               </Text>
             </View>
             <Switch
@@ -122,7 +122,7 @@ export default function SecuritySetupScreen() {
             </View>
           ))}
           <Text style={styles.securityNote}>
-            Security features are simulated in this prototype.
+            Keep your PIN private. SmartGX will never ask for it by message or phone call.
           </Text>
         </SmartCard>
       </View>

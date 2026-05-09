@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { colors } from "../../theme/colors";
@@ -27,6 +28,8 @@ export const AuthField = ({
   autoCapitalize = "none",
   helperText,
 }: AuthFieldProps) => {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}</Text>
@@ -34,11 +37,18 @@ export const AuthField = ({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.placeholder}
+        placeholderTextColor="#4A5568"
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
-        style={[styles.input, error ? styles.inputError : null]}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        underlineColorAndroid="transparent"
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          error ? styles.inputError : null,
+        ]}
       />
       {error ? (
         <Text style={styles.error}>{error}</Text>
@@ -65,20 +75,25 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   label: {
-    color: colors.textPrimary,
-    fontWeight: "600",
+    color: "#C4B5FD",
+    fontWeight: "700",
     fontSize: 13,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   input: {
-    backgroundColor: colors.inputBg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "#0A0F1E",
+    borderWidth: 1.5,
+    borderColor: "#1E2A42",
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: colors.textPrimary,
+    paddingVertical: 14,
+    color: "#F1F5F9",
     fontSize: 15,
+    // Prevent Android system default background
+  },
+  inputFocused: {
+    borderColor: "#7C3AED",
+    backgroundColor: "#0C1228",
   },
   inputError: {
     borderColor: colors.danger,

@@ -6,29 +6,30 @@ import { PrimaryButton } from "../../src/components/common/PrimaryButton";
 import { ScreenShell } from "../../src/components/common/ScreenShell";
 import { SmartCard } from "../../src/components/common/SmartCard";
 import { validateLoginInput } from "../../src/features/auth/auth.rules";
+import { resolveLoginRoute } from "../../src/features/auth/auth.service";
 import { useAuth } from "../../src/hooks/useAuth";
 import { colors } from "../../src/theme/colors";
 import { spacing } from "../../src/theme/spacing";
 import { typography } from "../../src/theme/typography";
 
 export default function LoginScreen() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, currentUser } = useAuth();
   const [emailOrMobile, setEmailOrMobile] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ emailOrMobile?: string; password?: string }>({});
   const [formError, setFormError] = useState("");
 
-  if (isAuthenticated) {
-    return <Redirect href="/dashboard" />;
+  if (isAuthenticated && currentUser) {
+    return <Redirect href={resolveLoginRoute(currentUser) as never} />;
   }
 
-  const onLogin = () => {
+  const onLogin = async () => {
     setFormError("");
     const validation = validateLoginInput({ emailOrMobile, password });
     setErrors(validation);
     if (Object.keys(validation).length > 0) return;
 
-    const result = login({ emailOrMobile, password });
+    const result = await login({ emailOrMobile, password });
     if (!result.ok) {
       setFormError(result.message ?? "Login failed.");
       return;
@@ -87,7 +88,6 @@ export default function LoginScreen() {
           <Text style={styles.hintTitle}>Test Accounts</Text>
           <Text style={styles.hintBody}>
             Student: <Text style={styles.hintCode}>jason@student.my</Text>{"\n"}
-            Fresh Graduate: <Text style={styles.hintCode}>aina@freshgrad.my</Text>{"\n"}
             Password: <Text style={styles.hintCode}>password123</Text>
           </Text>
         </SmartCard>

@@ -210,163 +210,6 @@ function calcEmergencyFund(input: HealthInput): HealthFactor {
   };
 }
 
-/* ─── AI Analysis narrative ───────────────────────────────────────── */
-
-function buildAIAnalysis(
-  factors: HealthFactor[],
-  input: HealthInput,
-  status: HealthStatus
-): string {
-  const savingsF  = factors.find((f) => f.key === "savings_rate")!;
-  const spendingF = factors.find((f) => f.key === "spending_control")!;
-  const debtF     = factors.find((f) => f.key === "debt_risk")!;
-  const emergencyF = factors.find((f) => f.key === "emergency_fund")!;
-
-  const savingsRate  = input.monthlyIncome > 0 ? input.monthlySavings / input.monthlyIncome : 0;
-  const overRatio    = input.safeBudget > 0 ? input.monthlySpend / input.safeBudget : 1;
-  const catName      = formatCategory(input.topSpendCategory);
-  const trendPhrase  = input.recentSpendTrend === "increasing"
-    ? "has increased over the past week"
-    : input.recentSpendTrend === "decreasing"
-    ? "has decreased over the past week"
-    : "has remained stable this week";
-
-  const savingsPct  = Math.round(savingsRate * 100);
-  const overPct     = Math.round((overRatio - 1) * 100);
-
-  // Build spending sentence
-  const spendingSentence = overRatio > 1.0
-    ? `Your ${catName} and discretionary spending ${trendPhrase}, pushing your monthly spend ${overPct}% above your safe cashflow budget.`
-    : `Your spending ${trendPhrase} and remains within your safe budget — ${catName} is your highest category.`;
-
-  // Build savings sentence
-  const savingsSentence = savingsRate >= 0.20
-    ? `Your saving consistency is strong, with ${savingsPct}% of your income being allocated to savings.`
-    : savingsRate >= 0.10
-    ? `You are currently saving ${savingsPct}% of your income, which is below the recommended 20% threshold.`
-    : `Your savings rate of ${savingsPct}% is significantly below the recommended level, which is a key drag on your overall score.`;
-
-  // Build debt sentence
-  const debtSentence = input.debtRatio > 0.15
-    ? `Your debt or future-money reliance is adding pressure to your monthly cashflow and contributing to a lower GXHealth score.`
-    : `Your debt exposure is low, which is a positive signal for your financial stability.`;
-
-  // Build emergency sentence
-  const emergencySentence = emergencyF.score < 35
-    ? `Your emergency fund is in its early stages — building this buffer will meaningfully improve your financial resilience.`
-    : emergencyF.score < 65
-    ? `Your emergency fund is growing but has not yet reached the recommended 3-month safety level.`
-    : `Your emergency fund provides a solid safety net against unexpected expenses.`;
-
-  // Compose final narrative based on status
-  if (status === "Excellent") {
-    return `Your financial health is in excellent condition. ${savingsSentence} ${spendingSentence} ${emergencySentence} Continue your current habits and consider gradually increasing your savings target.`;
-  }
-  if (status === "Healthy") {
-    if (spendingF.score < 70 && spendingF.score < savingsF.score) {
-      return `Your financial health is stable with good underlying habits. ${spendingSentence} ${savingsSentence} Reducing non-essential ${catName} spending would improve your GXHealth score faster than any other single change.`;
-    }
-    if (emergencyF.score < 40) {
-      return `Your financial health is stable. ${savingsSentence} ${spendingSentence} ${emergencySentence} A consistent monthly top-up to your emergency fund would strengthen your overall health score.`;
-    }
-    return `Your financial health is in good shape. ${savingsSentence} ${spendingSentence} ${debtSentence} Continue building your positive habits to reach Excellent status.`;
-  }
-  if (status === "Watch") {
-    if (spendingF.score <= savingsF.score && spendingF.score <= debtF.score) {
-      return `Your financial health is under watch and requires attention. ${spendingSentence} ${savingsSentence} Reducing non-essential spending is the fastest lever to improve your score right now.`;
-    }
-    if (savingsF.score < 50) {
-      return `Your financial health is under watch. ${savingsSentence} ${spendingSentence} ${debtSentence} Setting up a fixed automatic saving each month would be the most impactful change you can make.`;
-    }
-    return `Your financial health needs attention. ${spendingSentence} ${savingsSentence} ${debtSentence} Focus on controlling your top spending category and building your savings buffer.`;
-  }
-  // Risk
-  return `Your current financial patterns carry elevated risk. ${spendingSentence} ${savingsSentence} ${debtSentence} ${emergencySentence} Immediate changes to your spending and saving behaviour are recommended to prevent further decline.`;
-}
-
-/* ─── Behaviour-driven suggestions ───────────────────────────────── */
-
-function buildSuggestions(factors: HealthFactor[], input: HealthInput): string[] {
-  const suggestions: string[] = [];
-
-  const savingsF   = factors.find((f) => f.key === "savings_rate")!;
-  const spendingF  = factors.find((f) => f.key === "spending_control")!;
-  const debtF      = factors.find((f) => f.key === "debt_risk")!;
-  const emergencyF = factors.find((f) => f.key === "emergency_fund")!;
-
-  const catName  = formatCategory(input.topSpendCategory);
-  const savingsRate = input.monthlyIncome > 0 ? input.monthlySavings / input.monthlyIncome : 0;
-  const overRatio   = input.safeBudget > 0 ? input.monthlySpend / input.safeBudget : 1;
-
-  // Spending is the worst factor — spend-specific action
-  if (spendingF.score < 65) {
-    if (input.topSpendCategoryRatio > 0.30) {
-      const dailyCap = Math.round((input.safeBudget * input.topSpendCategoryRatio * 0.80) / 30);
-      suggestions.push(
-        `Limit your daily ${catName} spending to RM${dailyCap} for the next week to bring your cashflow back within your safe budget.`
-      );
-    } else {
-      const cutRM = Math.round((input.monthlySpend - input.safeBudget) * 0.5 / 10) * 10;
-      suggestions.push(
-        `Your spending is above your safe budget. Cutting discretionary expenses by RM${cutRM} this month would put you back on track.`
-      );
-    }
-  }
-
-  // Savings are weak
-  if (savingsF.score < 65) {
-    const targetSavings = Math.round(input.monthlyIncome * 0.20);
-    const gap = Math.max(0, targetSavings - input.monthlySavings);
-    const bumpRM = Math.round(gap / 10) * 10 || 50;
-    suggestions.push(
-      `Move RM${bumpRM} into your Savings Pocket today to recover your savings momentum and close the gap to your 20% target.`
-    );
-  }
-
-  // Debt risk is elevated
-  if (debtF.score < 65) {
-    if (input.debtRatio > 0.25) {
-      suggestions.push(
-        `Avoid future-money spending this week and use only your Spending Wallet. Reducing credit reliance will immediately lower your debt risk score.`
-      );
-    } else {
-      suggestions.push(
-        `You have some future-money or credit usage this period. Try to keep this week's transactions within your available balance only.`
-      );
-    }
-  }
-
-  // Emergency fund is weak
-  if (emergencyF.score < 50) {
-    const monthlyExpense = input.monthlySpend;
-    const targetFund = monthlyExpense * 3;
-    const gap = Math.max(0, targetFund - input.emergencyFundBalance);
-    const monthlyContrib = Math.round(Math.min(gap / 12, input.monthlyIncome * 0.05) / 10) * 10 || 30;
-    suggestions.push(
-      `Add RM${monthlyContrib} to your Emergency Pocket each month. Building to a 3-month safety buffer will protect your GXHealth score.`
-    );
-  }
-
-  // Spending is increasing trend — proactive warning
-  if (input.recentSpendTrend === "increasing" && spendingF.score >= 65) {
-    suggestions.push(
-      `Your spending trend is rising this week. Review your ${catName} transactions now before it crosses your safe budget threshold.`
-    );
-  }
-
-  // Score is already good — reinforce positive behaviour
-  if (suggestions.length === 0) {
-    suggestions.push(
-      `Maintain your current allocation and continue your saving streak — you are ahead of most users in your profile.`
-    );
-    suggestions.push(
-      `Consider increasing your savings target by RM${Math.round(input.monthlyIncome * 0.03 / 10) * 10} to build toward financial independence faster.`
-    );
-  }
-
-  return suggestions.slice(0, 4);
-}
-
 /* ─── Trend derivation ───────────────────────────────────────────── */
 
 function deriveTrend(score: number, spendTrend: "increasing" | "stable" | "decreasing"): HealthTrend {
@@ -389,47 +232,60 @@ export function computeHealthReport(input: HealthInput): HealthReport {
   const score    = clamp(rawScore);
   const status   = statusFromScore(score);
   const color    = overallStatusColor(status);
-
   return {
     score,
     status,
     statusColor: color,
     factors,
-    aiAnalysis:  buildAIAnalysis(factors, input, status),
-    suggestions: buildSuggestions(factors, input),
+    aiAnalysis:  "",
+    suggestions: [],
     trend:       deriveTrend(score, input.recentSpendTrend),
   };
 }
 
 /**
- * Build a HealthInput from the user's financial profile plus mock
- * behavioural signals.  When real transaction data is wired up, replace
- * the mock signals with live values — the engine logic stays untouched.
+ * Build a HealthInput from the user's financial profile.
+ *
+ * Pass `transactionSignals` (from `buildTransactionHealthSignals`) to use
+ * real transaction data for spending signals.  When omitted, conservative
+ * mock defaults are used so existing screens continue to work without
+ * requiring a transaction store.
  */
 export function buildHealthInput(params: {
   monthlyIncome: number;
+  monthlySavings?: number;
+  safeBudget?: number;
+  emergencyFundBalance?: number;
+  debtRatio?: number;
+  transactionSignals?: {
+    monthlySpend: number;
+    topSpendCategory: string;
+    topSpendCategoryRatio: number;
+    recentSpendTrend: "increasing" | "stable" | "decreasing";
+  };
 }): HealthInput {
-  const { monthlyIncome } = params;
+  const { monthlyIncome, transactionSignals, monthlySavings, safeBudget, emergencyFundBalance, debtRatio } = params;
 
   // Allocation-derived values (match dashboard wallet logic)
-  const monthlySavings       = monthlyIncome * 0.30;
-  const monthlySpend         = monthlyIncome * 0.63; // slightly over the 60 % safe budget
-  const safeBudget           = monthlyIncome * 0.60;
-  const emergencyFundBalance = monthlyIncome * 0.10; // ~0.16 months of expenses
+  const resolvedMonthlySavings = monthlySavings ?? monthlyIncome * 0.30;
+  const resolvedSafeBudget = safeBudget ?? monthlyIncome * 0.60;
+  const resolvedEmergencyFund = emergencyFundBalance ?? monthlyIncome * 0.10;
 
-  // Mock behavioural signals — replace with real transaction aggregation later
-  const debtRatio             = 0.05;       // 5 % income to debt/credit risk
-  const topSpendCategory      = "food";     // highest category by transaction volume
-  const topSpendCategoryRatio = 0.38;       // food = 38 % of total spend
-  const recentSpendTrend      = "increasing" as const; // week-on-week spend went up
+  // Use real transaction signals when available; fall back to mock defaults
+  const monthlySpend         = transactionSignals?.monthlySpend         ?? monthlyIncome * 0.63;
+  const topSpendCategory     = transactionSignals?.topSpendCategory     ?? "food";
+  const topSpendCategoryRatio = transactionSignals?.topSpendCategoryRatio ?? 0.38;
+  const recentSpendTrend     = transactionSignals?.recentSpendTrend     ?? ("increasing" as const);
+
+  const resolvedDebtRatio = debtRatio ?? 0.05;
 
   return {
     monthlyIncome,
-    monthlySavings,
+    monthlySavings: resolvedMonthlySavings,
     monthlySpend,
-    safeBudget,
-    emergencyFundBalance,
-    debtRatio,
+    safeBudget: resolvedSafeBudget,
+    emergencyFundBalance: resolvedEmergencyFund,
+    debtRatio: resolvedDebtRatio,
     topSpendCategory,
     topSpendCategoryRatio,
     recentSpendTrend,

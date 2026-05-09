@@ -8,8 +8,10 @@ import { ScreenShell } from "../../src/components/common/ScreenShell";
 import { SmartCard } from "../../src/components/common/SmartCard";
 import { validateRegisterInput } from "../../src/features/auth/auth.rules";
 import type { RegisterInput } from "../../src/features/auth/auth.types";
+import { resolveLoginRoute } from "../../src/features/auth/auth.service";
 import { STEP } from "../../src/features/auth/onboarding.route";
 import { useAuth } from "../../src/hooks/useAuth";
+import { useAuthStore } from "../../src/store/authStore";
 import { colors } from "../../src/theme/colors";
 import { spacing } from "../../src/theme/spacing";
 import { typography } from "../../src/theme/typography";
@@ -23,13 +25,13 @@ const blank: RegisterInput = {
 };
 
 export default function RegisterScreen() {
-  const { register, isAuthenticated } = useAuth();
+  const { register, isAuthenticated, currentUser } = useAuth();
   const [form, setForm] = useState<RegisterInput>(blank);
   const [errors, setErrors] = useState<Partial<Record<keyof RegisterInput, string>>>({});
   const [formError, setFormError] = useState("");
 
-  if (isAuthenticated) {
-    return <Redirect href="/dashboard" />;
+  if (isAuthenticated && currentUser) {
+    return <Redirect href={resolveLoginRoute(currentUser) as never} />;
   }
 
   const onChange = <K extends keyof RegisterInput>(key: K, value: RegisterInput[K]) => {
@@ -37,7 +39,7 @@ export default function RegisterScreen() {
     setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
-  const onRegister = () => {
+  const onRegister = async () => {
     setFormError("");
     const validation = validateRegisterInput(form);
     setErrors(validation);
@@ -45,12 +47,13 @@ export default function RegisterScreen() {
       setFormError("Please review the highlighted fields.");
       return;
     }
-    const result = register(form);
+    const result = await register(form);
     if (!result.ok) {
       setFormError(result.message ?? "Registration failed.");
       return;
     }
-    router.replace("/auth/verify-otp");
+    const user = useAuthStore.getState().currentUser;
+    router.replace((user ? resolveLoginRoute(user) : "/auth/verify-otp") as never);
   };
 
   return (

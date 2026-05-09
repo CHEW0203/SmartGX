@@ -12,6 +12,8 @@ export const colors = {
   primaryStrong: "#2563EB",
   primarySoft: "#1E3A8A",
   accent: "#7C3AED",
+  /** Main task bar centre Scan FAB fill (distinct deep purple on dark strip) */
+  taskbarScan: "#4C1D95",
   aiInsight: "#A78BFA",
   success: "#22C55E",
   warning: "#F59E0B",

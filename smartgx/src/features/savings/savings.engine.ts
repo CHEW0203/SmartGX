@@ -23,6 +23,22 @@ const SALARY_KEYWORDS = [
   "gaji bulanan", "emolumen", "upah", "monthly income",
 ];
 
+const INCOME_KEYWORDS: Record<string, string[]> = {
+  salary: ["salary", "payroll", "gaji", "monthly pay", "wages", "emolumen", "gaji bulanan"],
+  allowance: ["allowance", "elaun", "stipend", "scholarship"],
+  part_time: ["part-time", "part time", "wages", "freelance", "gig"],
+  freelance_income: ["freelance", "project payment", "client payment", "invoice"],
+  cash_income: ["cash income", "cash deposit", "cash"],
+};
+
+export type IncomeDetectionResult = {
+  isIncome: boolean;
+  incomeType: "salary" | "allowance" | "part_time" | "freelance_income" | "cash_income";
+  detectedCategory: "salary" | "allowance" | "part_time" | "freelance_income" | "cash_income";
+  confidence: "high" | "medium" | "low";
+  detectionReason: string;
+};
+
 /* ─── Mock income transactions ────────────────────────────────────── */
 
 export const MOCK_INCOME_TRANSACTIONS: IncomeTransaction[] = [
@@ -150,6 +166,66 @@ export function detectSalary(transactions: IncomeTransaction[]): DetectedSalary 
     }
   }
   return null;
+}
+
+/**
+ * Detect income based on amount + type + source + description.
+ * Used by the Dashboard income received flow.
+ */
+export function detectIncome(params: {
+  amount: number;
+  incomeType: "salary" | "allowance" | "part_time" | "freelance_income" | "cash_income";
+  source: string;
+  description: string;
+}): IncomeDetectionResult {
+  const amount = params.amount;
+  const incomeType = params.incomeType;
+  const source = params.source.trim();
+  const description = params.description.trim();
+  const haystack = `${source} ${description}`.toLowerCase();
+
+  const keywords = INCOME_KEYWORDS[incomeType] ?? [];
+  const keywordHit = keywords.find((kw) => haystack.includes(kw));
+  const employerLike = /(sdn bhd|bhd|enterprise|holdings|technolog|tech|payroll)/i.test(source);
+  const eduLike = /(utm|university|college|scholarship|allowance)/i.test(source);
+
+  let confidence: IncomeDetectionResult["confidence"] = "low";
+  let detectionReason = "Income details provided by user.";
+
+  if (amount <= 0) {
+    return {
+      isIncome: false,
+      incomeType,
+      detectedCategory: incomeType,
+      confidence: "low",
+      detectionReason: "Invalid income amount.",
+    };
+  }
+
+  if (keywordHit) {
+    confidence = "high";
+    detectionReason = `Detected keyword \"${keywordHit}\" in description/source.`;
+  } else if (incomeType === "salary" && employerLike) {
+    confidence = "high";
+    detectionReason = "Employer-like source detected.";
+  } else if (incomeType === "allowance" && eduLike) {
+    confidence = "high";
+    detectionReason = "Allowance-like source detected.";
+  } else if (amount >= 1500 && incomeType === "salary") {
+    confidence = "medium";
+    detectionReason = "Amount matches common salary pattern.";
+  } else if (amount >= 500) {
+    confidence = "medium";
+    detectionReason = "Amount is consistent with income event.";
+  }
+
+  return {
+    isIncome: true,
+    incomeType,
+    detectedCategory: incomeType,
+    confidence,
+    detectionReason,
+  };
 }
 
 /* ─── Allocation calculation ─────────────────────────────────────── */

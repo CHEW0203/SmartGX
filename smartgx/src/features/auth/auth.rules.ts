@@ -1,3 +1,4 @@
+import { weakPinReason } from "../security/pin.rules";
 import type { LoginInput, RegisterInput } from "./auth.types";
 
 export type ValidationErrors<T extends string> = Partial<Record<T, string>>;
@@ -53,7 +54,8 @@ export const validateOtp = (otp: string): string | null => {
 };
 
 export const validatePasscode = (passcode: string, confirm: string): string | null => {
-  if (passcode.length !== 6) return "Enter all 6 digits.";
+  const weak = weakPinReason(passcode);
+  if (weak) return weak;
   if (passcode !== confirm) return "Passcodes do not match.";
   return null;
 };

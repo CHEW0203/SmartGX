@@ -11,11 +11,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useAuth } from "../src/hooks/useAuth";
-import {
-  buildHealthInput,
-  computeHealthReport,
-} from "../src/features/health/health.engine";
 import type { HealthFactor, HealthReport, HealthTrend } from "../src/features/health/health.types";
+import { useHealthData } from "../src/hooks/useHealthData";
 import { colors } from "../src/theme/colors";
 import { radius } from "../src/theme/radius";
 import { spacing } from "../src/theme/spacing";
@@ -146,12 +143,14 @@ const NAV_TABS: NavTab[] = [
     ),
   },
   {
-    label: "Profile",
-    route: "/profile",
+    label: "Transaction",
+    route: "/transactions",
     renderIcon: (c, s = 22) => (
       <Svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <Path d="M20 21V19C20 17.9 19.1 17 18 17H6C4.9 17 4 17.9 4 19V21" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <Path d="M12 13C14.21 13 16 11.21 16 9C16 6.79 14.21 5 12 5C9.79 5 8 6.79 8 9C8 11.21 9.79 13 12 13Z" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M3 8C3 6.9 3.9 6 5 6H19C20.1 6 21 6.9 21 8V16C21 17.1 20.1 18 19 18H5C3.9 18 3 17.1 3 16V8Z" stroke={c} strokeWidth="1.8" />
+        <Path d="M15.5 12C15.5 13.93 13.93 15.5 12 15.5C10.07 15.5 8.5 13.93 8.5 12C8.5 10.07 10.07 8.5 12 8.5C13.93 8.5 15.5 10.07 15.5 12Z" stroke={c} strokeWidth="1.5" />
+        <Path d="M5 9.5H6.5V11H5V9.5Z" stroke={c} strokeWidth="1.2" strokeLinejoin="round" />
+        <Path d="M17.5 13H19V14.5H17.5V13Z" stroke={c} strokeWidth="1.2" strokeLinejoin="round" />
       </Svg>
     ),
   },
@@ -161,14 +160,9 @@ const NAV_TABS: NavTab[] = [
 
 export default function GXHealthScreen() {
   const { currentUser } = useAuth();
+  const report: HealthReport = useHealthData();
 
   if (!currentUser) return <Redirect href="/auth/login" />;
-
-  const monthlyIncome = currentUser.financialProfile?.monthlyIncome ?? 3000;
-
-  const report: HealthReport = computeHealthReport(
-    buildHealthInput({ monthlyIncome })
-  );
 
   const trend = TREND_META[report.trend];
 
@@ -248,7 +242,44 @@ export default function GXHealthScreen() {
               </Svg>
               <Text style={styles.aiCardLabel}>AI Analysis</Text>
             </View>
-            <Text style={styles.aiCardText}>{report.aiAnalysis}</Text>
+            {report.gxHealthAiStructured ? (
+              <>
+                <Text style={styles.aiCardText}>{report.gxHealthAiStructured.summary}</Text>
+                <Text style={styles.aiSectionLabel}>Why this GXHealth score</Text>
+                <Text style={styles.aiCardText}>{report.gxHealthAiStructured.scoreExplanation}</Text>
+                {report.gxHealthAiStructured.positiveSignals.length > 0 ? (
+                  <>
+                    <Text style={styles.aiSectionLabel}>Positive signals</Text>
+                    {report.gxHealthAiStructured.positiveSignals.map((line, i) => (
+                      <Text key={`p-${i}`} style={styles.aiBulletText}>
+                        • {line}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+                {report.gxHealthAiStructured.riskSignals.length > 0 ? (
+                  <>
+                    <Text style={styles.aiSectionLabel}>Risk signals</Text>
+                    {report.gxHealthAiStructured.riskSignals.map((line, i) => (
+                      <Text key={`r-${i}`} style={styles.aiBulletText}>
+                        • {line}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+                {report.gxHealthAiStructured.priorityAction ? (
+                  <>
+                    <Text style={styles.aiSectionLabel}>Priority</Text>
+                    <Text style={styles.aiCardText}>{report.gxHealthAiStructured.priorityAction}</Text>
+                  </>
+                ) : null}
+                <Text style={styles.aiConfidence}>
+                  Confidence: {report.gxHealthAiStructured.confidence}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.aiCardText}>{report.gxHealthAiBody || report.aiAnalysis}</Text>
+            )}
           </View>
         </View>
 
@@ -294,10 +325,17 @@ export default function GXHealthScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recommended Actions</Text>
           <View style={styles.actionsCard}>
-            {report.suggestions.map((s, i) => (
+            {(report.gxHealthAiStructured?.recommendedActions?.length
+              ? report.gxHealthAiStructured.recommendedActions
+              : report.suggestions.map((s) => ({ title: s, reason: "", impact: "" }))
+            ).map((item, i) => (
               <View key={i} style={styles.actionRow}>
                 <View style={[styles.actionDot, { backgroundColor: report.statusColor }]} />
-                <Text style={styles.actionText}>{s}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.actionText}>{item.title}</Text>
+                  {item.reason ? <Text style={styles.actionSubText}>{item.reason}</Text> : null}
+                  {item.impact ? <Text style={styles.actionImpactText}>{item.impact}</Text> : null}
+                </View>
               </View>
             ))}
           </View>
@@ -335,7 +373,10 @@ export default function GXHealthScreen() {
         {NAV_TABS.map((tab) =>
           tab.primary ? (
             <View key={tab.label} style={styles.tabPrimaryWrap}>
-              <Pressable style={styles.tabScanBtn}>
+              <Pressable
+                style={styles.tabScanBtn}
+                onPress={() => router.push("/scan" as never)}
+              >
                 {tab.renderIcon("#FFFFFF", 26)}
               </Pressable>
               <Text style={styles.tabLabelPrimary}>{tab.label}</Text>
@@ -490,6 +531,34 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     lineHeight: 23,
   },
+  aiSectionLabel: {
+    color: "#C4B5FD",
+    fontSize: typography.caption,
+    fontWeight: "700",
+    marginTop: spacing.xs,
+  },
+  aiBulletText: {
+    color: colors.textSecondary,
+    fontSize: typography.body,
+    lineHeight: 22,
+  },
+  aiConfidence: {
+    color: colors.textMuted,
+    fontSize: typography.caption,
+    marginTop: spacing.xs,
+  },
+  actionSubText: {
+    color: colors.textMuted,
+    fontSize: typography.caption,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  actionImpactText: {
+    color: "#A78BFA",
+    fontSize: typography.caption,
+    lineHeight: 20,
+    marginTop: 2,
+  },
 
   /* Factors card */
   factorsCard: {
@@ -641,7 +710,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.taskbarScan,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,

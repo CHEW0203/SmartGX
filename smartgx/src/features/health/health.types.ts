@@ -1,3 +1,5 @@
+import type { GXHealthStructuredAnalysis } from "../ai/gxhealth.ai.types";
+
 export type HealthStatus = "Excellent" | "Healthy" | "Watch" | "Risk";
 
 export type HealthTrend = "improving" | "stable" | "declining";
@@ -33,4 +35,8 @@ export interface HealthReport {
   aiAnalysis: string;    // AI-style behavioural narrative
   suggestions: string[]; // behaviour-driven recommended actions
   trend: HealthTrend;
+  /** Structured GXHealth AI sections when available (GXHealth screen) */
+  gxHealthAiStructured?: GXHealthStructuredAnalysis | null;
+  /** Longer combined narrative for multiline displays */
+  gxHealthAiBody?: string;
 }
