@@ -628,5 +628,3 @@ SmartGX helps young users:
 ## 📄 License
 
 This project is developed for hackathon, academic, and prototype demonstration purposes.
-message.txt
-16 KB
