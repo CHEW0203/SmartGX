@@ -202,71 +202,10 @@ SMARTGX/smartgx-ai-server
 
 SmartGX has two parts:
 
-1. **Expo mobile app**
-2. **AI server**
+1. **Expo mobile app** — the main SmartGX application
+2. **AI server** — local backend used to connect SmartGX with Gemini AI safely
 
-You need to configure both if you want to test the full AI experience.
-
----
-
-# Part 1: Expo App Setup
-
-## 1. Clone the repository
-
-```bash
-git clone https://github.com/CHEW0203/SmartGX.git
-cd SmartGX
-```
-
-## 2. Go to the Expo app folder
-
-```bash
-cd smartgx
-```
-
-## 3. Install dependencies
-
-```bash
-npm install
-```
-
-## 4. Create `.env`
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-For Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then fill in the required values inside:
-
-```text
-SMARTGX/smartgx/.env
-```
-
-Example:
-
-```env
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
-```
-
-> Do not commit `.env` to GitHub.
-
----
-
-# Part 2: AI Server Setup
-
-SmartGX uses a local AI server so the Gemini API key is not exposed inside the Expo mobile app.
-
-The AI flow is:
+The Gemini API key is placed inside the AI server, not inside the Expo mobile app.
 
 ```text
 SmartGX Expo App
@@ -274,23 +213,32 @@ SmartGX Expo App
 → Gemini API
 ```
 
-## 1. Open a new terminal
+---
 
-From the root folder:
+## 1. Clone the Repository
 
 ```bash
-cd smartgx-ai-server
+git clone https://github.com/CHEW0203/SmartGX.git
+cd SmartGX
 ```
 
-## 2. Install dependencies
+---
+
+## 2. Install Expo App Dependencies
+
+Go to the Expo app folder:
+
+```bash
+cd smartgx
+```
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## 3. Create `.env`
-
-Copy the example environment file:
+Create the Expo app `.env` file:
 
 ```bash
 cp .env.example .env
@@ -302,13 +250,98 @@ For Windows PowerShell:
 Copy-Item .env.example .env
 ```
 
-Then fill in:
+The Expo app environment file is located at:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+---
+
+## 3.🔐 Supabase Setup
+
+SmartGX uses Supabase for authentication, persistent user session, account balance, transactions, savings, notifications, GXHealth, FlexiCredit data, gamification progress, and security settings.
+
+SmartGX supports two Supabase setup options.
+
+### Option 1: Use the Default Hosted Supabase Project
+
+For quick hackathon testing, reviewers may use the default hosted Supabase configuration provided in `.env.example`.
+
+This allows the app to run without setting up a new Supabase project.
+
+Inside:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+use:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://ouqhyjildwfktughxrfj.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_gYlSoU1N8Fwnyp3lQQ0cbw_VdvY5lbd
+```
+
+### Option 2: Use Your Own Supabase Project
+
+If you prefer to use your own database:
+
+1. Create a Supabase project.
+2. Run the SQL schema inside:
+
+```text
+SMARTGX/smartgx/supabase/
+```
+
+3. Replace the Supabase values in `.env` with your own project URL and anon key.
+
+Example:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+> Only use the Supabase anon / publishable key in the Expo app.  
+> Do not expose any Supabase service role key.
+
+---
+
+## 4. Install AI Server Dependencies
+
+Open a **new terminal** from the root folder:
+
+```bash
+cd SmartGX
+cd smartgx-ai-server
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create the AI server `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+For Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The AI server environment file is located at:
 
 ```text
 SMARTGX/smartgx-ai-server/.env
 ```
 
-Example:
+Fill in:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -339,13 +372,112 @@ SMARTGX/smartgx-ai-server/.env
 
 ---
 
+## 5. Choose the Correct AI Endpoint
+
+The Expo app must know where the AI server is running.
+
+This value is placed inside:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+as:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=your_ai_server_endpoint
+```
+
+### If Running on Web or Local Computer
+
+Use:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
+```
+
+### If Running on Android Emulator
+
+Use:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://10.0.2.2:3001/api/ai
+```
+
+### If Running on a Physical Phone
+
+`localhost` will not work on a real phone because the phone cannot access your computer’s localhost.
+
+You must use your computer’s Wi-Fi IP address.
+
+On Windows PowerShell, run:
+
+```powershell
+ipconfig
+```
+
+Find:
+
+```text
+Wireless LAN adapter Wi-Fi
+IPv4 Address . . . . . . . . . . : 192.168.x.x
+```
+
+Example:
+
+```text
+IPv4 Address: 192.168.1.25
+```
+
+Then update:
+
+```text
+SMARTGX/smartgx/.env
+```
+
+with:
+
+```env
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://192.168.1.25:3001/api/ai
+```
+
+Use your own computer IP address.
+
+> Your phone and computer must be connected to the same Wi-Fi network.
+
+---
+
+## 6. Final Expo `.env` Example
+
+For local web testing:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://ouqhyjildwfktughxrfj.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_gYlSoU1N8Fwnyp3lQQ0cbw_VdvY5lbd
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
+```
+
+For physical phone testing:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://ouqhyjildwfktughxrfj.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_gYlSoU1N8Fwnyp3lQQ0cbw_VdvY5lbd
+EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://192.168.1.25:3001/api/ai
+```
+
+Replace `192.168.1.25` with your own computer IP address.
+
+---
+
 ## ▶️ Running the Project
 
 You need **two terminals**.
 
 ---
 
-## Terminal 1: Start AI Server
+### Terminal 1: Start the AI Server
+
+From the root folder:
 
 ```bash
 cd smartgx-ai-server
@@ -382,7 +514,9 @@ If `geminiKeyConfigured` is `false`, check that:
 
 ---
 
-## Terminal 2: Start Expo App
+### Terminal 2: Start the Expo App
+
+Open another terminal from the root folder:
 
 ```bash
 cd smartgx
@@ -397,78 +531,14 @@ press a
 
 Or scan the Expo QR code using a physical phone.
 
----
-
-## 📲 Running on a Physical Phone
-
-If you test on a real phone, `localhost` will not work because the phone cannot access your computer’s localhost.
-
-You must use your computer’s Wi-Fi IP address.
-
----
-
-## 1. Find your computer IP address
-
-On Windows PowerShell:
-
-```powershell
-ipconfig
-```
-
-Find:
-
-```text
-Wireless LAN adapter Wi-Fi
-IPv4 Address . . . . . . . . . . : 192.168.x.x
-```
-
-Example:
-
-```text
-IPv4 Address: 192.168.1.25
-```
-
----
-
-## 2. Update Expo app `.env`
-
-Open:
-
-```text
-SMARTGX/smartgx/.env
-```
-
-Change:
-
-```env
-EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://localhost:3001/api/ai
-```
-
-to:
-
-```env
-EXPO_PUBLIC_SMARTGX_AI_ENDPOINT=http://192.168.1.25:3001/api/ai
-```
-
-Use your own computer IP address.
-
----
-
-## 3. Restart Expo
-
-After changing `.env`, restart Expo:
-
-```bash
-npx expo start --clear
-```
-
-Your phone and computer must be connected to the same Wi-Fi network.
+> If you changed `.env`, restart Expo using `npx expo start --clear`.
 
 ---
 
 ## 🧪 Testing AI Connection
 
-## 1. Test inside the app
+
+### 1. Test Inside the App
 
 Open **SmartGX Assistant** and ask:
 
@@ -480,88 +550,7 @@ If AI is connected, the response should come from Gemini.
 
 If AI is not connected, SmartGX will use fallback logic.
 
----
 
-## 🔐 Supabase Setup
-
-SmartGX uses Supabase for:
-
-- authentication
-- persistent user session
-- user profile
-- account balance
-- transactions
-- savings
-- notifications
-- GXHealth
-- FlexiCredit data
-- gamification progress
-- security settings
-
-The Supabase environment variables should be placed in:
-
-```text
-SMARTGX/smartgx/.env
-```
-
-SmartGX supports two Supabase setup options.
-
----
-
-### Option 1: Use the default hosted Supabase project
-
-For quick hackathon testing, reviewers may use the default hosted Supabase configuration provided in `.env.example`.
-
-This allows the app to run without setting up a new Supabase project.
-
-Example:
-
-```env
-EXPO_PUBLIC_SUPABASE_URL=https://ouqhyjildwfktughxrfj.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_gYlSoU1N8Fwnyp3lQQ0cbw_VdvY5lbd
-```
-
-Then run:
-
-```bash
-cp .env.example .env
-```
-
-For Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-After that, start the app normally.
-
----
-
-### Option 2: Use your own Supabase project
-
-If you prefer to use your own database:
-
-1. Create a Supabase project.
-2. Run the SQL schema inside:
-
-```text
-SMARTGX/smartgx/supabase/
-```
-
-3. Copy `.env.example` to `.env`.
-4. Replace the Supabase values with your own project URL and anon key.
-
-Example:
-
-```env
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
----
-
-> Only use the Supabase anon / publishable key in the Expo app.  
-> Do not expose any Supabase service role key.
 
 ---
 
