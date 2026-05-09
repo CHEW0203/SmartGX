@@ -1,12 +1,17 @@
 import { getSupabase } from "../../lib/supabase";
-import { useAuthStore } from "../../store/authStore";
 import type { Transaction } from "../../types/transaction";
 import type { AppActivity } from "../../types/activity";
 import type { AppNotification } from "../../types/notification";
 import { transactionToDbInsert } from "./transactionMapper";
 
+/** Lazy require avoids static import cycles (persist ↔ authStore ↔ hydrate ↔ …). */
 export function getAuthUserId(): string | null {
-  return useAuthStore.getState().currentUser?.id ?? null;
+  try {
+    const { useAuthStore } = require("../../store/authStore") as typeof import("../../store/authStore");
+    return useAuthStore.getState().currentUser?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function persistAccount(userId: string): Promise<boolean> {

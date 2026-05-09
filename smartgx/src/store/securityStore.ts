@@ -1,9 +1,12 @@
 import { create } from "zustand";
 import type { ActivityType } from "../types/activity";
 import { syncSecurity } from "../services/db/persist";
-import { useAuthStore } from "./authStore";
 import { useActivityStore } from "./activityStore";
 import { useNotificationStore } from "./notificationStore";
+
+function getAuthStore() {
+  return require("./authStore").useAuthStore as typeof import("./authStore").useAuthStore;
+}
 
 export type SafetyCheckStatus = "idle" | "running" | "safe" | "attention" | "risk";
 
@@ -154,9 +157,10 @@ export const useSecurityStore = create<SecurityState>((set, get) => ({
 
   setBiometricEnabledLocal: (on) => {
     set({ biometricEnabledLocal: on });
-    const user = useAuthStore.getState().currentUser;
+    const auth = getAuthStore();
+    const user = auth.getState().currentUser;
     if (user) {
-      useAuthStore.setState((s) => ({
+      auth.setState((s) => ({
         currentUser: s.currentUser ? { ...s.currentUser, biometricEnabled: on } : null,
         users: s.users.map((u) => (u.id === user.id ? { ...u, biometricEnabled: on } : u)),
       }));
@@ -203,6 +207,6 @@ export function sensitiveActionBlockedMessage(): string | null {
 
 export function userHasPinSet(): boolean {
   if (useSecurityStore.getState().pinSetFromServer) return true;
-  const p = useAuthStore.getState().currentUser?.passcode;
+  const p = getAuthStore().getState().currentUser?.passcode;
   return typeof p === "string" && p.length === 6 && /^\d{6}$/.test(p);
 }
