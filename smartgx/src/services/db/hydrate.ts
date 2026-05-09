@@ -177,9 +177,10 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
 
     const sec = secRes.data;
     if (sec) {
+      const pinHash = typeof sec.pin_hash === "string" ? sec.pin_hash : null;
       useSecurityStore.setState({
-        pinSetFromServer: Boolean(sec.pin_set),
-        serverPinHash: typeof sec.pin_hash === "string" ? sec.pin_hash : null,
+        pinSetFromServer: Boolean(sec.pin_set) || Boolean(pinHash && pinHash.length > 0),
+        serverPinHash: pinHash,
         emergencyLock: Boolean(sec.emergency_lock_active),
         deviceTrusted: Boolean(sec.trusted_device),
         wrongPinAttempts: Number(sec.wrong_pin_attempts ?? 0),

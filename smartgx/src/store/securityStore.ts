@@ -206,7 +206,9 @@ export function sensitiveActionBlockedMessage(): string | null {
 }
 
 export function userHasPinSet(): boolean {
-  if (useSecurityStore.getState().pinSetFromServer) return true;
+  const sec = useSecurityStore.getState();
+  if (sec.pinSetFromServer) return true;
+  if (typeof sec.serverPinHash === "string" && sec.serverPinHash.length > 0) return true;
   const p = getAuthStore().getState().currentUser?.passcode;
   return typeof p === "string" && p.length === 6 && /^\d{6}$/.test(p);
 }

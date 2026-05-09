@@ -55,10 +55,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const authUser = mapProfileToAuthUser(profile, res.user);
-    set({ currentUser: authUser, isAuthenticated: true, users: [] });
-
     const h = await hydrateUserDataStores(res.user.id);
     if (!h.ok && __DEV__) console.warn("[SmartGX] hydrate after login", h.message);
+
+    set({ currentUser: authUser, isAuthenticated: true, users: [] });
 
     return { ok: true, nextRoute: resolveLoginRoute(authUser) };
   },
@@ -88,10 +88,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!profile) return { ok: false, message: "Could not load new profile." };
 
     const authUser = mapProfileToAuthUser(profile, res.user);
-    set({ currentUser: authUser, isAuthenticated: true, users: [] });
     await hydrateUserDataStores(res.user.id);
 
     useSecurityStore.setState({ pinSetFromServer: false, serverPinHash: null });
+
+    set({ currentUser: authUser, isAuthenticated: true, users: [] });
 
     return { ok: true };
   },

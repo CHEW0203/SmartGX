@@ -11,6 +11,8 @@ interface DigitInputProps {
   length?: number;
   secure?: boolean;
   autoFocus?: boolean;
+  /** When false, digits cannot be entered or focused (e.g. before OTP is sent). */
+  editable?: boolean;
 }
 
 export const DigitInput = ({
@@ -19,11 +21,16 @@ export const DigitInput = ({
   length = 6,
   secure = true,
   autoFocus = true,
+  editable = true,
 }: DigitInputProps) => {
   const inputRef = useRef<TextInput>(null);
 
   return (
-    <Pressable style={styles.container} onPress={() => inputRef.current?.focus()}>
+    <Pressable
+      style={[styles.container, !editable && styles.containerDisabled]}
+      disabled={!editable}
+      onPress={() => editable && inputRef.current?.focus()}
+    >
       <View style={styles.dotsRow}>
         {Array.from({ length }).map((_, i) => {
           const filled = i < value.length;
@@ -52,7 +59,8 @@ export const DigitInput = ({
         keyboardType="numeric"
         maxLength={length}
         style={styles.hidden}
-        autoFocus={autoFocus}
+        autoFocus={editable && autoFocus}
+        editable={editable}
         caretHidden
         secureTextEntry={false}
       />
@@ -64,6 +72,9 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     gap: spacing.md,
+  },
+  containerDisabled: {
+    opacity: 0.55,
   },
   dotsRow: {
     flexDirection: "row",

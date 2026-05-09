@@ -35,9 +35,9 @@ async function runInitializeAuthSession(): Promise<void> {
       const profile = await fetchUsersProfile(session.user.id);
       if (profile) {
         const authUser = mapProfileToAuthUser(profile, session.user);
-        useAuthStore.setState({ currentUser: authUser, isAuthenticated: true, users: [] });
         const h = await hydrateUserDataStores(session.user.id);
         if (!h.ok && __DEV__) console.warn("[SmartGX] hydrate on cold start", h.message);
+        useAuthStore.setState({ currentUser: authUser, isAuthenticated: true, users: [] });
       }
     }
 
@@ -54,8 +54,8 @@ async function runInitializeAuthSession(): Promise<void> {
           const profile = await fetchUsersProfile(nextSession.user.id);
           if (profile) {
             const authUser = mapProfileToAuthUser(profile, nextSession.user);
-            useAuthStore.setState({ currentUser: authUser, isAuthenticated: true, users: [] });
             await hydrateUserDataStores(nextSession.user.id);
+            useAuthStore.setState({ currentUser: authUser, isAuthenticated: true, users: [] });
           }
         }
       });

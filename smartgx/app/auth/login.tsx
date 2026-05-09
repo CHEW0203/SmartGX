@@ -83,14 +83,6 @@ export default function LoginScreen() {
             Create Account
           </Text>
         </View>
-
-        <SmartCard>
-          <Text style={styles.hintTitle}>Test Accounts</Text>
-          <Text style={styles.hintBody}>
-            Student: <Text style={styles.hintCode}>jason@student.my</Text>{"\n"}
-            Password: <Text style={styles.hintCode}>password123</Text>
-          </Text>
-        </SmartCard>
       </View>
     </ScreenShell>
   );
@@ -119,7 +111,4 @@ const styles = StyleSheet.create({
   },
   footerText: { color: colors.textSecondary },
   link: { color: colors.aiInsight, fontWeight: "700" },
-  hintTitle: { color: colors.warning, fontWeight: "700" },
-  hintBody: { color: colors.textSecondary, lineHeight: 22 },
-  hintCode: { color: colors.aiInsight, fontWeight: "700" },
 });

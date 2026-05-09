@@ -25,6 +25,7 @@ export default function VerifyOtpScreen() {
   }
 
   const onSendOtp = () => {
+    setOtp("");
     setOtpSent(true);
     setError("");
   };
@@ -58,26 +59,40 @@ export default function VerifyOtpScreen() {
 
         <SmartCard>
           <Text style={styles.otpHint}>
-            Enter the 6-digit OTP sent to your registered mobile number.
+            {otpSent
+              ? "Enter the 6-digit OTP sent to your registered mobile number."
+              : "Tap Send OTP to receive your verification code."}
           </Text>
-          <DigitInput value={otp} onChange={setOtp} length={6} secure={false} autoFocus={otpSent} />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {!otpSent ? (
-            <PrimaryButton label="Send OTP" onPress={onSendOtp} />
-          ) : (
+          {otpSent ? (
             <>
-              <PrimaryButton label="Verify OTP" onPress={onVerify} />
+              <DigitInput value={otp} onChange={setOtp} length={6} secure={false} autoFocus />
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <PrimaryButton label="Verify OTP" onPress={onVerify} disabled={otp.length !== 6} />
               <PrimaryButton label="Resend OTP" onPress={onSendOtp} variant="ghost" />
             </>
+          ) : (
+            <PrimaryButton label="Send OTP" onPress={onSendOtp} />
           )}
         </SmartCard>
 
-        <SmartCard>
-          <Text style={styles.disclaimerTitle}>Did not receive a code?</Text>
-          <Text style={styles.disclaimerBody}>
-            Tap Resend OTP. If it still does not arrive, check your mobile number and try again.
-          </Text>
-        </SmartCard>
+        {otpSent ? (
+          <>
+            <SmartCard>
+              <Text style={styles.disclaimerTitle}>Did not receive a code?</Text>
+              <Text style={styles.disclaimerBody}>
+                Tap Resend OTP. If it still does not arrive, check your mobile number and try again.
+              </Text>
+            </SmartCard>
+
+            <SmartCard>
+              <Text style={styles.defaultOtpTitle}>Default OTP (verify demo)</Text>
+              <Text style={styles.defaultOtpCode}>123456</Text>
+              <Text style={styles.defaultOtpHint}>
+                Use this code to verify. In production this would come from SMS.
+              </Text>
+            </SmartCard>
+          </>
+        ) : null}
       </View>
     </ScreenShell>
   );
@@ -119,5 +134,25 @@ const styles = StyleSheet.create({
   disclaimerBody: {
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  defaultOtpTitle: {
+    color: colors.textSecondary,
+    fontWeight: "700",
+    textAlign: "center",
+    fontSize: typography.caption,
+  },
+  defaultOtpCode: {
+    color: colors.aiInsight,
+    fontWeight: "800",
+    fontSize: 28,
+    textAlign: "center",
+    letterSpacing: 4,
+    marginVertical: spacing.sm,
+  },
+  defaultOtpHint: {
+    color: colors.textMuted,
+    fontSize: typography.caption,
+    lineHeight: 18,
+    textAlign: "center",
   },
 });

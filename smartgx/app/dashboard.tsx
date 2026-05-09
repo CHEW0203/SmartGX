@@ -1,5 +1,5 @@
 import React from "react";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, usePathname } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -103,8 +103,10 @@ type NavTab = {
   renderIcon: (color: string, size?: number) => React.ReactNode;
 };
 
+const TASKBAR_ACTIVE = "#A78BFA";
+
 const NAV_TABS: NavTab[] = [
-  { label: "Home",    renderIcon: (c, s = 22) => (
+  { label: "Home", route: "/dashboard", renderIcon: (c, s = 22) => (
       <Svg width={s} height={s} viewBox="0 0 24 24" fill="none">
         <Path d="M3 12L5 10M5 10L12 3L19 10M5 10V20C5 20.6 5.4 21 6 21H9M19 10L21 12M19 10V20C19 20.6 18.6 21 18 21H15M9 21V15C9 14.4 9.4 14 10 14H14C14.6 14 15 14.4 15 15V21M9 21H15" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
@@ -175,6 +177,7 @@ function BellIcon({ size = 20, color = "#C4B5FD" }: { size?: number; color?: str
 /* ─── Screen ──────────────────────────────────────────────────────── */
 
 export default function DashboardScreen() {
+  const pathname = usePathname();
   const { currentUser } = useAuth();
   const { savingsBuckets } =
     useSavingsStore();
@@ -366,6 +369,10 @@ export default function DashboardScreen() {
 
   if (!currentUser) return <Redirect href="/auth/login" />;
   if (!userHasPinSet()) return <Redirect href="/auth/app-pin-setup" />;
+
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const isTabActive = (route?: string) =>
+    Boolean(route) && (normalizedPath === route || normalizedPath === `${route}/`);
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "left", "right"]}>
@@ -716,8 +723,10 @@ export default function DashboardScreen() {
               style={styles.tabItem}
               onPress={() => tab.route && router.push(tab.route as never)}
             >
-              {tab.renderIcon(colors.textMuted)}
-              <Text style={styles.tabLabel}>{tab.label}</Text>
+              {tab.renderIcon(isTabActive(tab.route) ? TASKBAR_ACTIVE : colors.textMuted)}
+              <Text style={[styles.tabLabel, isTabActive(tab.route) && styles.tabLabelActive]}>
+                {tab.label}
+              </Text>
             </Pressable>
           )
         )}
@@ -1256,6 +1265,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 10,
     fontWeight: "600",
+  },
+  tabLabelActive: {
+    color: TASKBAR_ACTIVE,
+    fontWeight: "700",
   },
   tabLabelPrimary: {
     color: "#A78BFA",

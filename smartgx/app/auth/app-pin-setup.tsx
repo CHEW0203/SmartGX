@@ -10,7 +10,7 @@ import { weakPinReason } from "../../src/features/security/pin.rules";
 import { useAuth } from "../../src/hooks/useAuth";
 import { useActivityStore } from "../../src/store/activityStore";
 import { useNotificationStore } from "../../src/store/notificationStore";
-import { useSecurityStore } from "../../src/store/securityStore";
+import { useSecurityStore, userHasPinSet } from "../../src/store/securityStore";
 import { colors } from "../../src/theme/colors";
 import { spacing } from "../../src/theme/spacing";
 import { typography } from "../../src/theme/typography";
@@ -19,16 +19,13 @@ type Phase = "create" | "confirm";
 
 export default function AppPinSetupScreen() {
   const { currentUser, isAuthenticated, setAppPasscode } = useAuth();
-  const pinSetFromServer = useSecurityStore((s) => s.pinSetFromServer);
   const [phase, setPhase] = useState<Phase>("create");
   const [passcode, setPasscode] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
 
   if (!isAuthenticated || !currentUser) return <Redirect href="/auth/login" />;
-  if (pinSetFromServer) return <Redirect href="/dashboard" />;
-  const pin = currentUser.passcode;
-  if (pin && pin.length === 6 && /^\d{6}$/.test(pin)) return <Redirect href="/dashboard" />;
+  if (userHasPinSet()) return <Redirect href="/dashboard" />;
 
   const onNext = () => {
     const weak = weakPinReason(passcode);

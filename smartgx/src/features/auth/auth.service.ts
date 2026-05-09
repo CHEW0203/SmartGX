@@ -1,7 +1,7 @@
 import { validateRegisterInput } from "./auth.rules";
 import { getOnboardingRoute, STEP } from "./onboarding.route";
 import type { AuthUser, LoginInput, RegisterInput } from "./auth.types";
-import { useSecurityStore } from "../../store/securityStore";
+import { userHasPinSet } from "../../store/securityStore";
 
 export const getInitialMockUsers = (): AuthUser[] => [];
 
@@ -22,10 +22,8 @@ export const findUserByCredentials = (
 
 export const resolveLoginRoute = (user: AuthUser): string => {
   if (!user.hasCompletedOnboarding) return getOnboardingRoute(user.onboardingStep);
-  if (useSecurityStore.getState().pinSetFromServer) return "/dashboard";
-  const pin = user.passcode;
-  if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) return "/auth/app-pin-setup";
-  return "/dashboard";
+  if (userHasPinSet()) return "/dashboard";
+  return "/auth/app-pin-setup";
 };
 
 export const createRegisteredUser = (
