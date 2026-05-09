@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Redirect, router } from "expo-router";
 import {
+  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -98,23 +99,13 @@ export default function ScanScreen() {
   const [nudgeContext, setNudgeContext] = useState<NudgeRiskContext | null>(null);
   const [nudgeEvaluation, setNudgeEvaluation] = useState<NudgeEvaluation | null>(null);
   const [receiveFeedback, setReceiveFeedback] = useState("");
+  const [pinFlowBusy, setPinFlowBusy] = useState(false);
 
   useEffect(() => {
     if (payStep !== "passcode") return;
     const t = setTimeout(() => pinRef.current?.focus(), 200);
     return () => clearTimeout(t);
   }, [payStep]);
-
-  useEffect(() => {
-    if (payStep !== "confirm" || !txn) return;
-    const valid = txn.amount > 0 && txn.amount <= accountStore.mainBalance;
-    console.log("SCAN_ENTER_PIN_PRESSABLE_RENDERED", {
-      disabled: false,
-      amount: txn.amount,
-      valid,
-      step: payStep,
-    });
-  }, [payStep, txn, accountStore.mainBalance]);
 
   const handleScan = () => {
     const block = sensitiveActionBlockedMessage();
@@ -176,7 +167,7 @@ export default function ScanScreen() {
   };
 
   const handleStartPinFlow = async () => {
-    console.log("SCAN_ENTER_PIN_PRESSED");
+    if (pinFlowBusy) return;
     const context = buildScanRiskContext();
     if (!context) return;
     const evaluation = evaluateNudgeRisk(context);
@@ -186,13 +177,18 @@ export default function ScanScreen() {
       setPayStep("passcode");
       return;
     }
-    const message = await generateAiNudge(context, evaluation);
-    // Hide confirm sheet first so AI modal is not visually blocked on native.
-    setPayStep("scanner");
-    setNudgeContext(context);
-    setNudgeEvaluation(evaluation);
-    setNudgeMessage(message);
-    setNudgeVisible(true);
+    setPinFlowBusy(true);
+    try {
+      const message = await generateAiNudge(context, evaluation);
+      // Hide confirm sheet first so AI modal is not visually blocked on native.
+      setPayStep("scanner");
+      setNudgeContext(context);
+      setNudgeEvaluation(evaluation);
+      setNudgeMessage(message);
+      setNudgeVisible(true);
+    } finally {
+      setPinFlowBusy(false);
+    }
   };
 
   const handleSaveInstead = () => {
@@ -399,6 +395,7 @@ export default function ScanScreen() {
     setNudgeEvaluation(null);
     setNudgeMessage("");
     setReceiveFeedback("");
+    setPinFlowBusy(false);
   };
 
   const handleCopyAccount = async () => {
@@ -655,8 +652,17 @@ export default function ScanScreen() {
                     </Text>
                   </View>
                 </View>
-                <Pressable style={modal.primaryBtnFull} onPress={handleStartPinFlow} hitSlop={8}>
-                  <Text style={modal.primaryBtnText}>Enter PIN →</Text>
+                <Pressable
+                  style={[modal.primaryBtnFull, pinFlowBusy && { opacity: 0.85 }]}
+                  onPress={() => void handleStartPinFlow()}
+                  disabled={pinFlowBusy}
+                  hitSlop={8}
+                >
+                  {pinFlowBusy ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={modal.primaryBtnText}>Enter PIN →</Text>
+                  )}
                 </Pressable>
               </View>
             )}

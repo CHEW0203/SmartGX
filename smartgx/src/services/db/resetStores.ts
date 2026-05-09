@@ -21,6 +21,7 @@ export function resetAllDataStores() {
     flexiUsed: 0,
     flexiCreditLimit: 0,
     flexiCreditUsed: 0,
+    debitDailyLimit: DEFAULT_DEBIT_DAILY_LIMIT,
   });
 
   useSavingsStore.setState({

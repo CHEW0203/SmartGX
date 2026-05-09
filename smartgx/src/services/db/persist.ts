@@ -217,6 +217,19 @@ export async function persistFlexiCredit(userId: string): Promise<boolean> {
   return true;
 }
 
+let gamificationSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Batches rapid gamification updates (e.g. dashboard syncFromData) into one write. */
+export function syncGamificationDebounced(delayMs = 1200): void {
+  const uid = getAuthUserId();
+  if (!uid) return;
+  if (gamificationSyncTimer) clearTimeout(gamificationSyncTimer);
+  gamificationSyncTimer = setTimeout(() => {
+    gamificationSyncTimer = null;
+    if (getAuthUserId() === uid) void persistGamification(uid);
+  }, delayMs);
+}
+
 export async function persistGamification(userId: string): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
@@ -275,6 +288,32 @@ export async function persistGamification(userId: string): Promise<boolean> {
       { onConflict: "user_id,campaign_id" }
     );
     if (e4) return false;
+  }
+
+  for (const m of g.missions) {
+    const dbStatus =
+      m.status === "claimed" ? "claimed" : m.status === "ready_to_claim" ? "ready_to_claim" : "in_progress";
+    const { error: e5 } = await sb.from("missions").upsert(
+      {
+        user_id: userId,
+        mission_id: m.id,
+        type: m.type,
+        title: m.title,
+        progress: m.progress,
+        target: m.target,
+        status: dbStatus,
+        reward_water: m.rewardWater,
+        reward_points: m.rewardPoints,
+        metadata: {
+          description: m.description,
+          expiry: m.expiry,
+          rewardBonus: m.rewardBonus ?? 0,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,mission_id" }
+    );
+    if (e5) return false;
   }
   return true;
 }

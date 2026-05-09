@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { ActivityType, AppActivity } from "../types/activity";
 import { MOCK_SMARTGX_USERS } from "../data/mockSmartGXUsers";
 import { clamp, normalizeScore, normalizeSmartScore, safeNumber } from "../lib/number";
+import { getAuthUserId, syncGamification, syncGamificationDebounced } from "../services/db/persist";
 
 type MissionType = "daily" | "weekly";
 
@@ -252,15 +253,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
     const riskyContinue = activities.filter((a) => a.type === "flexicredit_drawdown").length;
     const missionRate = missions.length === 0 ? 0 : (missions.filter((m) => m.completed).length / missions.length);
     const debtBehavior = Math.max(0, 100 - Math.min(100, normalizedDebtPressure));
-    const streakScore = Math.min(100, currentStreak * 8);
     const savingsGrowthScore = Math.min(100, normalizedTotalSavings / 10);
-    const treeHealth = Math.round(
-      0.4 * normalizedGxHealth +
-        0.2 * (missionRate * 100) +
-        0.15 * streakScore +
-        0.15 * savingsGrowthScore +
-        0.1 * debtBehavior
-    );
 
     const scoreGX = Math.round(normalizedGxHealth * 0.3 * 10) / 10;
     const scoreStreak = Math.round(Math.min(100, currentStreak * 10) * 0.2 * 10) / 10;
@@ -305,11 +298,11 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
           total: baseScore,
         },
         smartScore: normalizeSmartScore(Math.round((baseScore + rewardScoreExtra) * 100) / 100, 420),
-        treeHealth: normalizeScore(treeHealth, 70),
-        treeState: treeStateFromHealth(normalizeScore(treeHealth, 70)),
+        // Money Tree health / state come from watering & DB — do not overwrite on every dashboard sync.
         lastSyncedAt: new Date().toISOString(),
       };
     });
+    if (getAuthUserId()) syncGamificationDebounced();
   },
 
   autoCreditStreakMilestones: () => {
@@ -422,6 +415,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
       water: st.water + m.water,
       smartScore: st.smartScore + m.points,
     }));
+    if (getAuthUserId()) syncGamification();
     return { water: m.water, points: m.points, bonusReward: m.bonus };
   },
 
@@ -436,6 +430,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
       water: st.water + mission.rewardWater,
       smartScore: st.smartScore + mission.rewardPoints,
     }));
+    if (getAuthUserId()) syncGamification();
     return { water: mission.rewardWater, points: mission.rewardPoints, bonusReward: mission.rewardBonus ?? 0 };
   },
 
@@ -461,6 +456,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
       treeHealth: nextHealth,
       treeState: treeStateFromHealth(nextHealth),
     });
+    if (getAuthUserId()) syncGamification();
     return { ok: true, leveledUp: nextLevel > s.treeLevel, levelReward };
   },
 

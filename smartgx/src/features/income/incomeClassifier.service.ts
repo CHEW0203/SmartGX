@@ -327,8 +327,15 @@ export function classifyIncomingReceiptFallback(input: IncomingClassifierInput):
   };
 }
 
+const INCOME_AI_WAIT_MS = 2800;
+
 export async function classifyIncomingReceipt(input: IncomingClassifierInput): Promise<IncomingClassifierResult> {
-  const remote = await classifyIncomingReceiptRemote(input);
+  const config = getAiConfig();
+  if (!config.enabled) return classifyIncomingReceiptFallback(input);
+
+  const remotePromise = classifyIncomingReceiptRemote(input);
+  const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), INCOME_AI_WAIT_MS));
+  const remote = await Promise.race([remotePromise, timeoutPromise]);
   if (remote) return remote;
   return classifyIncomingReceiptFallback(input);
 }

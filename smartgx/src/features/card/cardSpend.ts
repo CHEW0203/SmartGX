@@ -8,6 +8,18 @@ export function clampPercent(pct: number): number {
   return Math.min(100, Math.max(0, pct));
 }
 
+/** Safe 0–100 display percent; non-finite input returns fallback. */
+export function safePercent(value: unknown, fallback = 0): number {
+  let n: number;
+  if (typeof value === "number" && Number.isFinite(value)) n = value;
+  else if (typeof value === "string" && value.trim() !== "") {
+    const p = Number(value);
+    n = Number.isFinite(p) ? p : NaN;
+  } else n = NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return clampPercent(n);
+}
+
 export function safeMoney(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {

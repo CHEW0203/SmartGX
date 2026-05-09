@@ -36,11 +36,14 @@ export interface AssistantChatMessage {
   content: string;
 }
 
-function devLog(...args: unknown[]) {
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-    // eslint-disable-next-line no-console
-    console.log("[SmartGX AI]", ...args);
-  }
+/** Every request/timeout/success line — off by default; set EXPO_PUBLIC_SMARTGX_AI_VERBOSE=1 to trace. */
+const AI_TRACE =
+  typeof process !== "undefined" && process.env.EXPO_PUBLIC_SMARTGX_AI_VERBOSE === "1";
+
+function devTrace(...args: unknown[]) {
+  if (typeof __DEV__ === "undefined" || !__DEV__ || !AI_TRACE) return;
+  // eslint-disable-next-line no-console
+  console.log("[SmartGX AI]", ...args);
 }
 
 /** Normalized POST /api/ai */
@@ -51,7 +54,7 @@ export async function callSmartGxAi(
   config: AiConfig = getAiConfig()
 ): Promise<SmartGxAiResponse | null> {
   if (!config.enabled || !config.endpoint.startsWith("http")) {
-    devLog("endpoint not configured; skip remote", { feature });
+    devTrace("endpoint not configured; skip remote", { feature });
     return null;
   }
 
@@ -59,7 +62,7 @@ export async function callSmartGxAi(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    devLog("request", { feature, endpointHost: config.endpoint.replace(/\/api\/ai\/?$/, "") });
+    devTrace("request", { feature, endpointHost: config.endpoint.replace(/\/api\/ai\/?$/, "") });
 
     const res = await fetch(config.endpoint, {
       method: "POST",
@@ -75,7 +78,7 @@ export async function callSmartGxAi(
 
     const raw: unknown = await res.json().catch(() => null);
     if (!raw || typeof raw !== "object") {
-      devLog("invalid JSON body", { feature, fallbackUsed: true });
+      devTrace("invalid JSON body", { feature, fallbackUsed: true });
       return null;
     }
 
@@ -91,15 +94,15 @@ export async function callSmartGxAi(
     const model = typeof o.model === "string" ? o.model : "";
 
     if (!success) {
-      devLog("server reported failure", { feature, provider, fallbackUsed: true, error: error || "unknown" });
+      devTrace("server reported failure", { feature, provider, fallbackUsed: true, error: error || "unknown" });
       return { success: false, provider, model, content: "", structured, error: error || "AI error" };
     }
 
-    devLog("ok", { feature, provider, model, fallbackUsed: false });
+    devTrace("ok", { feature, provider, model, fallbackUsed: false });
     return { success: true, provider, model, content, structured, error: null };
   } catch {
     clearTimeout(timer);
-    devLog("network/timeout", { feature, fallbackUsed: true });
+    devTrace("network/timeout", { feature, fallbackUsed: true });
     return null;
   }
 }

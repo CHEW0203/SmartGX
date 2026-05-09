@@ -339,14 +339,6 @@ export default function DashboardScreen() {
       timestamp: new Date().toISOString(),
       route: "/dashboard",
     });
-    notificationStore.addNotification({
-      id: `notif-water-${Date.now()}`,
-      title: "Money Tree Growth",
-      message: "Your Money Tree gained EXP from watering.",
-      read: false,
-      type: "insight",
-      time: "Just now",
-    });
     if (res.leveledUp) {
       if (res.levelReward > 0) {
         useSavingsStore.getState().manualSave("bonus", res.levelReward);

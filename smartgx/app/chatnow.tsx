@@ -39,6 +39,16 @@ const INITIAL_MESSAGES: ChatMessage[] = [
 
 const TASKBAR_ABOVE_GAP = 48;
 
+function messageFromCaught(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e != null && typeof e === "object" && "message" in e) {
+    const m = (e as { message: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return "Something went wrong. Try again.";
+}
+
 export default function ChatNowScreen() {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
@@ -76,7 +86,7 @@ export default function ChatNowScreen() {
           : r.detail;
       Alert.alert(title, msg);
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Unknown error");
+      Alert.alert("Error", messageFromCaught(e));
     } finally {
       setTestBusy(false);
     }

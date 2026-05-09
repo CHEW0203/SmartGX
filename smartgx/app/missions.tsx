@@ -21,6 +21,12 @@ export default function MissionsScreen() {
   const addActivity = useActivityStore((s) => s.addActivity);
   const [missionAiTip, setMissionAiTip] = useState<string | null>(null);
 
+  const sortedMissions = useMemo(() => {
+    const rank = (st: MissionLifecycleStatus) =>
+      st === "ready_to_claim" ? 0 : st === "in_progress" ? 1 : 2;
+    return [...missions].sort((a, b) => rank(a.status) - rank(b.status));
+  }, [missions]);
+
   const missionDigest = useMemo(() => {
     const inProgress = missions.filter((m) => m.status === "in_progress").map((m) => m.title);
     const ready = missions.filter((m) => m.status === "ready_to_claim").length;
@@ -89,7 +95,7 @@ export default function MissionsScreen() {
         {missionAiTip ? <Text style={s.aiTip}>{missionAiTip}</Text> : null}
         <Text style={s.water}>Water Balance 💧 {gamifyWater}</Text>
 
-        {missions.map((m) => {
+        {sortedMissions.map((m) => {
           const claimable = m.status === "ready_to_claim";
           const pct = m.target > 0 ? Math.min(100, Math.round((m.progress / m.target) * 100)) : 0;
           let btnStyle = s.btnProgress;

@@ -14,7 +14,7 @@ import type { BorrowPurpose } from "../../features/flexiCredit/debtReadiness.ser
 import { dbRowToTransaction, filterTransactionsNotFuture } from "./transactionMapper";
 import type { DbTransactionRow } from "./transactionMapper";
 import { normalizeScore, normalizeSmartScore, safeNumber } from "../../lib/number";
-import { DEFAULT_CREDIT_CARD_LIMIT } from "../../features/card/cardSpend";
+import { DEFAULT_CREDIT_CARD_LIMIT, DEFAULT_DEBIT_DAILY_LIMIT } from "../../features/card/cardSpend";
 
 function normalizeHydratedFlexi(
   limitRaw: unknown,
@@ -98,6 +98,7 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
         flexiUsed,
         flexiCreditLimit: 0,
         flexiCreditUsed: 0,
+        debitDailyLimit: DEFAULT_DEBIT_DAILY_LIMIT,
       });
     }
 
@@ -303,21 +304,29 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
     const missRows = missRes.data ?? [];
     if (missRows.length > 0) {
       useGamificationStore.setState((s) => ({
-        missions: missRows.map((m) => ({
-          id: m.mission_id,
-          type: m.type as "daily" | "weekly",
-          title: m.title,
-          description: (m.metadata as { description?: string })?.description ?? "",
-          target: Number(m.target),
-          progress: Number(m.progress),
-          rewardWater: m.reward_water,
-          rewardPoints: m.reward_points,
-          rewardBonus: (m.metadata as { rewardBonus?: number })?.rewardBonus,
-          completed: m.status === "claimed" || Number(m.progress) >= Number(m.target),
-          claimed: m.status === "claimed",
-          status: m.status as typeof s.missions[0]["status"],
-          expiry: (m.metadata as { expiry?: string })?.expiry ?? new Date().toISOString().slice(0, 10),
-        })),
+        missions: missRows.map((m) => {
+          const prog = Number(m.progress);
+          const tgt = Number(m.target);
+          const claimed = m.status === "claimed";
+          const done = claimed || prog >= tgt;
+          const lifecycle =
+            claimed ? "claimed" : done ? "ready_to_claim" : "in_progress";
+          return {
+            id: m.mission_id,
+            type: m.type as "daily" | "weekly",
+            title: m.title,
+            description: (m.metadata as { description?: string })?.description ?? "",
+            target: tgt,
+            progress: Math.min(prog, tgt),
+            rewardWater: m.reward_water,
+            rewardPoints: m.reward_points,
+            rewardBonus: (m.metadata as { rewardBonus?: number })?.rewardBonus,
+            completed: done,
+            claimed,
+            status: lifecycle as typeof s.missions[0]["status"],
+            expiry: (m.metadata as { expiry?: string })?.expiry ?? new Date().toISOString().slice(0, 10),
+          };
+        }),
       }));
     }
 

@@ -7,6 +7,9 @@ import type {
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "../ai/ai.config";
 
+/** Cap wait for AI nudge copy; after this, use local fallback so Scan/Debit PIN flow stays snappy. */
+const NUDGE_AI_TIMEOUT_MS = 750;
+
 function fallbackNudge(context: NudgeRiskContext, evaluation: NudgeEvaluation): string {
   const amount = `RM${context.amount.toFixed(2)}`;
   const topCat = context.topSpendingCategory || "others";
@@ -36,26 +39,26 @@ export async function generateAiNudge(context: NudgeRiskContext, evaluation: Nud
   if (!config.enabled) return fallbackNudge(context, evaluation);
 
   try {
-    const res = await callSmartGxAi(
-      "nudge",
-      [
-        "Write one concise SmartGX payment nudge (max 3 short sentences).",
-        "Be specific to amount, payment method, and risk level. Plain text only.",
-      ].join(" "),
-      {
-        riskLevel: evaluation.riskLevel,
-        reasonCodes: evaluation.reasonCodes,
-        actionType: context.actionType,
-        amount: context.amount,
-        merchant: context.merchant,
-        category: context.category,
-        gxHealthScore: context.gxHealthScore,
-        cardType: context.cardType,
-        topSpendingCategory: context.topSpendingCategory,
-        availableBalance: context.availableBalance,
-      },
-      config
-    );
+    const payload = {
+      riskLevel: evaluation.riskLevel,
+      reasonCodes: evaluation.reasonCodes,
+      actionType: context.actionType,
+      amount: context.amount,
+      merchant: context.merchant,
+      category: context.category,
+      gxHealthScore: context.gxHealthScore,
+      cardType: context.cardType,
+      topSpendingCategory: context.topSpendingCategory,
+      availableBalance: context.availableBalance,
+    };
+    const prompt = [
+      "Write one concise SmartGX payment nudge (max 3 short sentences).",
+      "Be specific to amount, payment method, and risk level. Plain text only.",
+    ].join(" ");
+
+    const aiPromise = callSmartGxAi("nudge", prompt, payload, config);
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), NUDGE_AI_TIMEOUT_MS));
+    const res = await Promise.race([aiPromise, timeoutPromise]);
     if (res?.success && res.content.trim()) return res.content.trim().slice(0, 900);
   } catch {
     /* fallback */

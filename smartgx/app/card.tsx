@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Redirect, router } from "expo-router";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -37,6 +38,18 @@ import type { NudgeDecision, NudgeEvaluation, NudgeRiskContext } from "../src/fe
 import { AiNudgeModal } from "../src/components/nudge/AiNudgeModal";
 import { verifyUserPin } from "../src/features/security/sensitiveAction";
 import { sensitiveActionBlockedMessage, userHasPinSet } from "../src/store/securityStore";
+import {
+  computeCreditBillingWindow,
+  computeCreditMinPayment,
+  creditUsagePercent,
+  dailyDebitProgressPercent,
+  DEFAULT_DEBIT_DAILY_LIMIT,
+  availableDebitSpending,
+  formatBillingDateShort,
+  remainingDebitDailyLimit,
+  safeMoney,
+  sumDebitTapPaySpendForDay,
+} from "../src/features/card/cardSpend";
 
 /* ─── Payment flow step ───────────────────────────────────────────── */
 type PayStep = "idle" | "confirm" | "flexiWarning" | "passcode" | "success" | "error";
@@ -61,9 +74,6 @@ const DEBIT_META = {
   network:     "Mastercard",
   expiryMonth: "09",
   expiryYear:  "2028",
-  dailyLimit:  2000,
-  monthlyLimit:8000,
-  spentToday:  245.40,
 };
 
 const FLEXI_META = {
@@ -73,8 +83,20 @@ const FLEXI_META = {
   network:       "Mastercard",
   expiryMonth:   "11",
   expiryYear:    "2027",
-  paymentDueDate:"1 June 2026",
 };
+
+function debitTapPayValidation(
+  amount: number,
+  mainBalance: number,
+  debitDailyLimit: number,
+  todayDebitSpent: number
+): { ok: true } | { ok: false; message: string } {
+  const main = Math.max(0, safeMoney(mainBalance, 0));
+  const rem = remainingDebitDailyLimit(debitDailyLimit, todayDebitSpent);
+  if (amount > main) return { ok: false, message: "Insufficient Main Account balance." };
+  if (amount > rem) return { ok: false, message: "This exceeds your remaining daily debit limit." };
+  return { ok: true };
+}
 
 /* ─── Icons ───────────────────────────────────────────────────────── */
 function ChevronLeft({ c = colors.textMuted }: { c?: string }) {
@@ -322,6 +344,8 @@ export default function CardScreen() {
   const [nudgeMessage, setNudgeMessage] = useState("");
   const [nudgeContext, setNudgeContext] = useState<NudgeRiskContext | null>(null);
   const [nudgeEvaluation, setNudgeEvaluation] = useState<NudgeEvaluation | null>(null);
+  /** True while waiting on AI nudge before PIN (avoid double-tap + show spinner). */
+  const [payFrictionBusy, setPayFrictionBusy] = useState(false);
 
   const payPinRef = useRef<TextInput>(null);
 
@@ -330,8 +354,6 @@ export default function CardScreen() {
   const updateCtrl = isDebit ? updateDebitControls : updateFlexiControls;
   const numVisible = isDebit ? debitVisible : flexiVisible;
 
-  const flexiAvailable = accountStore.flexiLimit - accountStore.flexiUsed;
-  const repaymentDue   = Math.round(accountStore.flexiUsed * 0.5);
   const monthlyIncome = currentUser?.financialProfile?.monthlyIncome ?? 0;
   const maybeBudget = (currentUser?.financialProfile as { monthlyBudget?: number } | undefined)?.monthlyBudget;
   const roundUpPocketLabel =
@@ -340,6 +362,24 @@ export default function CardScreen() {
       : roundUpDestination === "emergency"
       ? "Emergency Fund"
       : "Goals";
+
+  const todayYmd = new Date().toISOString().slice(0, 10);
+  const rawDailyLimit = safeMoney(accountStore.debitDailyLimit, DEFAULT_DEBIT_DAILY_LIMIT);
+  const dailyLimit = rawDailyLimit > 0 ? rawDailyLimit : DEFAULT_DEBIT_DAILY_LIMIT;
+  const todayDebitSpent = sumDebitTapPaySpendForDay(transactions, currentUser?.id ?? "", todayYmd);
+  const remainingDaily = remainingDebitDailyLimit(dailyLimit, todayDebitSpent);
+  const availableDebit = availableDebitSpending(accountStore.mainBalance, dailyLimit, todayDebitSpent);
+  const dailyPct = Math.round(dailyDebitProgressPercent(dailyLimit, todayDebitSpent));
+
+  const billing = computeCreditBillingWindow();
+  const flexiAvailable = Math.max(
+    0,
+    Math.round((accountStore.flexiLimit - accountStore.flexiUsed) * 100) / 100
+  );
+  const creditUsed = Math.max(0, Math.round(accountStore.flexiUsed * 100) / 100);
+  const repaymentDueCredit = creditUsed;
+  const minPaymentCredit = computeCreditMinPayment(repaymentDueCredit);
+  const flexiUsePctRounded = Math.round(creditUsagePercent(creditUsed, accountStore.flexiLimit));
 
   // ── Countdown for Credit warning ──
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -361,18 +401,6 @@ export default function CardScreen() {
     const t = setTimeout(() => payPinRef.current?.focus(), 250);
     return () => clearTimeout(t);
   }, [payStep]);
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (payStep !== "confirm" || !generatedTxn || !isDebit) return;
-    const valid = generatedTxn.amount > 0 && generatedTxn.amount <= accountStore.mainBalance;
-    console.log("DEBIT_TAPPAY_CONTINUE_RENDERED", {
-      disabled: false,
-      amount: generatedTxn.amount,
-      valid,
-      step: payStep,
-    });
-  }, [payStep, generatedTxn, isDebit, accountStore.mainBalance]);
 
   // ── Handlers: card reveal ──
   const handleEyePress = () => {
@@ -417,19 +445,18 @@ export default function CardScreen() {
     setNudgeContext(null);
     setNudgeEvaluation(null);
     setNudgeMessage("");
+    setPayFrictionBusy(false);
 
-    // Hard validation first: impossible payments must be blocked early.
-    if (isDebit && txn.amount > accountStore.mainBalance) {
-      setPayError(
-        `Insufficient balance. This payment is ${formatRM(txn.amount)} but your Debit balance is ${formatRM(accountStore.mainBalance)}.`
-      );
-      setPayStep("error");
-      return;
-    }
-    if (!isDebit && txn.amount > flexiAvailable) {
-      setPayError(
-        `Insufficient credit limit. This payment is ${formatRM(txn.amount)} but available credit is ${formatRM(flexiAvailable)}.`
-      );
+    // Hard validation first: impossible payments must be blocked early (before PIN).
+    if (isDebit) {
+      const dchk = debitTapPayValidation(txn.amount, accountStore.mainBalance, dailyLimit, todayDebitSpent);
+      if (!dchk.ok) {
+        setPayError(dchk.message);
+        setPayStep("error");
+        return;
+      }
+    } else if (txn.amount > flexiAvailable) {
+      setPayError("This exceeds your available credit.");
       setPayStep("error");
       return;
     }
@@ -487,6 +514,7 @@ export default function CardScreen() {
   };
 
   const runCardNudgeCheck = async () => {
+    if (payFrictionBusy) return;
     const context = buildCardRiskContext();
     if (!context) return;
     const evaluation = evaluateNudgeRisk(context);
@@ -503,11 +531,16 @@ export default function CardScreen() {
       return;
     }
 
-    const message = await generateAiNudge(context, evaluation);
-    // Keep nudge above sheet on native by hiding the underlying sheet first.
-    setPayStep("idle");
-    setNudgeMessage(message);
-    setNudgeVisible(true);
+    setPayFrictionBusy(true);
+    try {
+      const message = await generateAiNudge(context, evaluation);
+      // Keep nudge above sheet on native by hiding the underlying sheet first.
+      setPayStep("idle");
+      setNudgeMessage(message);
+      setNudgeVisible(true);
+    } finally {
+      setPayFrictionBusy(false);
+    }
   };
 
   const handleSaveInstead = () => {
@@ -561,7 +594,13 @@ export default function CardScreen() {
       return;
     }
     if (decision === "use_debit_instead" && generatedTxn) {
-      if (accountStore.mainBalance < generatedTxn.amount) {
+      const dchk = debitTapPayValidation(
+        generatedTxn.amount,
+        accountStore.mainBalance,
+        dailyLimit,
+        todayDebitSpent
+      );
+      if (!dchk.ok) {
         setNudgeVisible(false);
         return;
       }
@@ -627,16 +666,40 @@ export default function CardScreen() {
       setPayStep("error"); return;
     }
 
+    if (sourceIsDebit) {
+      const dchk = debitTapPayValidation(
+        generatedTxn.amount,
+        accountStore.mainBalance,
+        dailyLimit,
+        todayDebitSpent
+      );
+      if (!dchk.ok) {
+        setPayError(dchk.message);
+        setPayPin("");
+        return;
+      }
+    } else if (generatedTxn.amount > flexiAvailable) {
+      setPayError("This exceeds your available credit.");
+      setPayPin("");
+      return;
+    }
+
     // Process payment
     const result = sourceIsDebit
       ? accountStore.debitPay(generatedTxn.amount)
       : accountStore.flexiPay(generatedTxn.amount);
 
     if (!result.ok) {
-      const msg = result.reason === "insufficient_balance"
-        ? `Insufficient balance. You have ${formatRM(accountStore.mainBalance)} available on your Debit Card.`
-        : `Insufficient credit limit. You have ${formatRM(flexiAvailable)} available credit remaining.`;
-      setPayError(msg); setPayStep("error"); return;
+      const msg = sourceIsDebit
+        ? result.reason === "insufficient_balance"
+          ? "Insufficient Main Account balance."
+          : "Could not complete this payment."
+        : result.reason === "insufficient_limit"
+          ? "This exceeds your available credit."
+          : "Could not complete this payment.";
+      setPayError(msg);
+      setPayStep("error");
+      return;
     }
 
     // Create transaction record
@@ -654,20 +717,22 @@ export default function CardScreen() {
       isSuspicious:    false,
       note:            sourceIsDebit ? "Debit card payment" : "Credit payment (future money)",
       sourceAction:    "tappay",
+      tapPaySource:    sourceIsDebit ? "debit" : "flexicard",
       occurredAt:      isoNow,
     };
     addTransaction(newTxn);
 
-    // Add notification
+    // Add notification (read store after pay so balances are current)
+    const acctAfter = useAccountStore.getState();
     const updatedAvailable = sourceIsDebit
-      ? accountStore.mainBalance  // already reduced by debitPay
-      : accountStore.flexiLimit - accountStore.flexiUsed; // already increased by flexiPay
+      ? acctAfter.mainBalance
+      : Math.max(0, Math.round((acctAfter.flexiLimit - acctAfter.flexiUsed) * 100) / 100);
     addNotification({
       id:    `notif-pay-${Date.now()}`,
       title: sourceIsDebit ? "Debit Card payment successful" : "Credit payment completed",
       message: sourceIsDebit
-        ? `RM${generatedTxn.amount.toFixed(2)} paid to ${generatedTxn.merchant}. Updated balance: ${formatRM(updatedAvailable)}.`
-        : `RM${generatedTxn.amount.toFixed(2)} paid to ${generatedTxn.merchant} using Credit (future money). Available credit: ${formatRM(accountStore.flexiLimit - accountStore.flexiUsed)}.`,
+        ? `RM${generatedTxn.amount.toFixed(2)} paid to ${generatedTxn.merchant}. Main account: ${formatRM(updatedAvailable)}.`
+        : `RM${generatedTxn.amount.toFixed(2)} paid to ${generatedTxn.merchant} using Credit (future money). Available credit: ${formatRM(updatedAvailable)}.`,
       time:  `${dateOnly} · ${timeLabel}`,
       read:  false,
       type:  sourceIsDebit ? "info" : "alert",
@@ -737,11 +802,18 @@ export default function CardScreen() {
     setNudgeContext(null);
     setNudgeEvaluation(null);
     setNudgeMessage("");
+    setPayFrictionBusy(false);
   };
 
   // ── Payment step renders ──
   const renderConfirmStep = () => {
     if (!generatedTxn) return null;
+    const confirmNow = new Date();
+    const confirmDateLabel = confirmNow.toLocaleDateString("en-MY", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
     const ptLabel = generatedTxn.paymentType === "contactless"
       ? "Contactless" : generatedTxn.paymentType === "overseas" ? "Overseas" : "Online";
     const cardLabel = isDebit
@@ -768,7 +840,9 @@ export default function CardScreen() {
           </View>
           <View style={pay.detailRow}>
             <Text style={pay.detailKey}>Date</Text>
-            <Text style={pay.detailVal}>8 May 2026 · {generatedTxn.transactionTime}</Text>
+            <Text style={pay.detailVal}>
+              {confirmDateLabel} · {generatedTxn.transactionTime}
+            </Text>
           </View>
           {isDebit && (
             <View style={pay.detailRow}>
@@ -789,16 +863,20 @@ export default function CardScreen() {
         </View>
 
         <Pressable
-          style={pay.primaryBtnFull}
+          style={[pay.primaryBtnFull, payFrictionBusy && pay.btnDisabled]}
           onPress={() => {
-            if (isDebit) console.log("DEBIT_TAPPAY_CONTINUE_PRESSED");
             handleProceedFromConfirm();
           }}
+          disabled={payFrictionBusy}
           hitSlop={8}
         >
-          <Text style={pay.primaryBtnText}>
-            {isDebit ? "Continue to Pay →" : "Use Credit →"}
-          </Text>
+          {payFrictionBusy ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={pay.primaryBtnText}>
+              {isDebit ? "Continue to Pay →" : "Use Credit →"}
+            </Text>
+          )}
         </Pressable>
       </View>
     );
@@ -853,18 +931,20 @@ export default function CardScreen() {
         </View>
 
         <Pressable
-          style={[pay.primaryBtnFull, !canProceed && pay.btnDisabled]}
+          style={[pay.primaryBtnFull, (!canProceed || payFrictionBusy) && pay.btnDisabled]}
           onPress={() => {
-            if (canProceed) {
-              console.log("CREDIT_CONTINUE_PRESSED");
-              void runCardNudgeCheck();
-            }
+            if (canProceed && !payFrictionBusy) void runCardNudgeCheck();
           }}
+          disabled={!canProceed || payFrictionBusy}
           hitSlop={8}
         >
-          <Text style={[pay.primaryBtnText, !canProceed && { opacity: 0.4 }]}>
-            {canProceed ? "Continue with Credit →" : `Wait ${countdown}s`}
-          </Text>
+          {payFrictionBusy ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={[pay.primaryBtnText, !canProceed && { opacity: 0.4 }]}>
+              {canProceed ? "Continue with Credit →" : `Wait ${countdown}s`}
+            </Text>
+          )}
         </Pressable>
       </View>
     );
@@ -930,9 +1010,16 @@ export default function CardScreen() {
   const renderSuccessStep = () => {
     if (!generatedTxn) return null;
     const paidByDebit = (paySourceOverride ?? selectedCard) === "debit";
+    const acct = useAccountStore.getState();
     const updatedLabel = paidByDebit
-      ? `Balance: ${formatRM(accountStore.mainBalance)}`
-      : `Available credit: ${formatRM(accountStore.flexiLimit - accountStore.flexiUsed)}`;
+      ? `Main account: ${formatRM(acct.mainBalance)}`
+      : `Available credit: ${formatRM(Math.max(0, Math.round((acct.flexiLimit - acct.flexiUsed) * 100) / 100))}`;
+    const successNow = new Date();
+    const successDateLabel = successNow.toLocaleDateString("en-MY", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
     return (
       <View style={[pay.step, pay.stepCentered]}>
         <View style={pay.successIconWrap}>
@@ -947,7 +1034,7 @@ export default function CardScreen() {
         <Text style={pay.successMerchant}>{generatedTxn.merchant}</Text>
         <Text style={pay.successAmount}>{formatRM(generatedTxn.amount)}</Text>
         <Text style={pay.successCardLine}>
-          {paidByDebit ? "Debit Card" : "Credit"} · 8 May 2026 · {generatedTxn.transactionTime}
+          {paidByDebit ? "Debit Card" : "Credit"} · {successDateLabel} · {generatedTxn.transactionTime}
         </Text>
         <View style={pay.successBalancePill}>
           <Text style={pay.successBalanceText}>{updatedLabel}</Text>
@@ -979,13 +1066,6 @@ export default function CardScreen() {
       </Pressable>
     </View>
   );
-
-  // ── Spending limit bar ──
-  const dailyPct    = Math.min(100, Math.round((DEBIT_META.spentToday / DEBIT_META.dailyLimit) * 100));
-  const monthlyPct  = Math.min(100, Math.round((accountStore.mainBalance < 2100
-    ? (2100 - accountStore.mainBalance + DEBIT_META.spentToday) / DEBIT_META.monthlyLimit
-    : DEBIT_META.spentToday / DEBIT_META.monthlyLimit) * 100));
-  const flexiUsePct = Math.min(100, Math.round((accountStore.flexiUsed / accountStore.flexiLimit) * 100));
 
   if (!currentUser) return <Redirect href="/auth/login" />;
   if (!userHasPinSet()) return <Redirect href="/auth/app-pin-setup" />;
@@ -1153,14 +1233,25 @@ export default function CardScreen() {
         {isDebit && (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionLabel}>Spending Limits</Text>
-            <LimitBar label="Daily limit" spent={DEBIT_META.spentToday} limit={DEBIT_META.dailyLimit} pct={dailyPct} />
-            <View style={{ height: spacing.sm }} />
-            <LimitBar
-              label="Main balance"
-              spent={2100 - accountStore.mainBalance}
-              limit={2100}
-              pct={monthlyPct}
-            />
+            <View style={{ gap: 8, marginBottom: spacing.sm }}>
+              <View style={styles.debitSummaryRow}>
+                <Text style={styles.flexiCellLabel}>Main account balance</Text>
+                <Text style={styles.flexiCellValue}>{formatRM(accountStore.mainBalance)}</Text>
+              </View>
+              <View style={styles.debitSummaryRow}>
+                <Text style={styles.flexiCellLabel}>Available debit spending</Text>
+                <Text style={styles.flexiCellValue}>{formatRM(availableDebit)}</Text>
+              </View>
+              <View style={styles.debitSummaryRow}>
+                <Text style={styles.flexiCellLabel}>Remaining daily limit</Text>
+                <Text style={styles.flexiCellValue}>{formatRM(remainingDaily)}</Text>
+              </View>
+              <View style={styles.debitSummaryRow}>
+                <Text style={styles.flexiCellLabel}>Spent today (debit TapPay)</Text>
+                <Text style={styles.flexiCellValue}>{formatRM(todayDebitSpent)}</Text>
+              </View>
+            </View>
+            <LimitBar label="Daily limit" spent={todayDebitSpent} limit={dailyLimit} pct={dailyPct} />
           </View>
         )}
 
@@ -1174,13 +1265,38 @@ export default function CardScreen() {
               <View style={styles.flexiCell}><Text style={styles.flexiCellLabel}>Available credit</Text><Text style={[styles.flexiCellValue, { color: "#22C55E" }]}>{formatRM(flexiAvailable)}</Text></View>
             </View>
             <View style={styles.flexiBarTrack}>
-              <View style={[styles.flexiBarFill, { width: `${flexiUsePct}%` as never, backgroundColor: flexiUsePct > 80 ? "#EF4444" : "#F59E0B" }]} />
+              <View
+                style={[
+                  styles.flexiBarFill,
+                  {
+                    width: `${flexiUsePctRounded}%` as never,
+                    backgroundColor: flexiUsePctRounded > 80 ? "#EF4444" : "#F59E0B",
+                  },
+                ]}
+              />
             </View>
-            <Text style={styles.flexiBarLabel}>{flexiUsePct}% of credit limit used</Text>
+            <Text style={styles.flexiBarLabel}>{flexiUsePctRounded}% of credit limit used</Text>
+            <Text style={[styles.flexiBarLabel, { marginBottom: 4 }]}>
+              Cycle {formatBillingDateShort(billing.billingCycleStart)} – {formatBillingDateShort(billing.billingCycleEnd)}
+              {" · "}Due {formatBillingDateShort(billing.paymentDueDate)}
+            </Text>
             <View style={styles.repayRow}>
-              <View style={styles.repayCell}><Text style={styles.repayCellLabel}>Repayment due</Text><Text style={styles.repayCellValue}>RM{repaymentDue}</Text></View>
-              <View style={styles.repayCell}><Text style={styles.repayCellLabel}>Min. payment</Text><Text style={styles.repayCellValue}>RM{Math.round(repaymentDue * 0.2)}</Text></View>
-              <View style={styles.repayCell}><Text style={styles.repayCellLabel}>Due date</Text><Text style={styles.repayCellValue}>{FLEXI_META.paymentDueDate}</Text></View>
+              <View style={styles.repayCell}>
+                <Text style={styles.repayCellLabel}>Repayment due</Text>
+                <Text style={styles.repayCellValue}>{formatRM(repaymentDueCredit)}</Text>
+              </View>
+              <View style={styles.repayCell}>
+                <Text style={styles.repayCellLabel}>Min. payment</Text>
+                <Text style={styles.repayCellValue}>
+                  {repaymentDueCredit <= 0 ? formatRM(0) : formatRM(minPaymentCredit)}
+                </Text>
+              </View>
+              <View style={styles.repayCell}>
+                <Text style={styles.repayCellLabel}>Payment status</Text>
+                <Text style={styles.repayCellValue}>
+                  {repaymentDueCredit <= 0 ? "No payment due" : formatBillingDateShort(billing.paymentDueDate)}
+                </Text>
+              </View>
             </View>
             <View style={styles.flexiNote}><Text style={styles.flexiNoteText}>Credit is a flexible spending facility. Repay by the due date to protect your GXHealth score.</Text></View>
           </View>
@@ -1364,6 +1480,8 @@ const styles = StyleSheet.create({
   repayCellValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   flexiNote:      { marginTop: 10, padding: 10, backgroundColor: "rgba(245,158,11,0.07)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(245,158,11,0.15)" },
   flexiNoteText:  { color: "#D1A054", fontSize: 11, lineHeight: 17 },
+
+  debitSummaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
 
   txnLink:      { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, gap: 12 },
   txnLinkBody:  { flex: 1, gap: 3 },
