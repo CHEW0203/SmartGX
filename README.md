@@ -8,7 +8,7 @@ SmartGX extends GXBank’s digital banking foundation by adding a proactive fina
 
 ## 🚀 One-Line Pitch
 
-**SmartGX builds on the GXBank digital banking experience with AI-powered financial resilience features that help young Malaysians save before spending, think before borrowing, and stay protected before risk happens.**
+**SmartGX builds on the GXBank digital banking experience with AI-powered financial resilience features that help young Malaysians save before spending, think before borrowing, build lasting financial habits, and stay protected before risk happens.**
 
 ---
 
