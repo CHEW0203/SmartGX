@@ -126,25 +126,75 @@ SmartGX focuses on helping young users make better financial decisions before ri
 - **SmartGX Assistant** with quick questions and AI-powered prompt support
 
 ---
+## 📸 Prototype Screenshots
 
-## 🛠️ Tech Stack
+### Core Banking Experience
 
-### Mobile App
+| Dashboard | Saving & Automation | GXHealth |
+|---|---|---|
+| ![Dashboard](./smartgx/assets/screenshots/dashboard.png) | ![Saving & Automation](./smartgx/assets/screenshots/saving-automation.png) | ![GXHealth](./smartgx/assets/screenshots/gxhealth.png) |
 
-- React Native
-- Expo
-- TypeScript
-- Expo Router
-- Supabase
-- Expo SecureStore
+### AI, Debt Prevention & Engagement
+
+| AI Nudge | FlexiCredit Debt Readiness | Money Tree |
+|---|---|---|
+| ![AI Nudge](./smartgx/assets/screenshots/ai-nudge.png) | ![FlexiCredit Debt Readiness](./smartgx/assets/screenshots/flexicredit.png) | ![Money Tree](./smartgx/assets/screenshots/money-tree.png) |
+
+---
+
+## 🛠️ Technology & System Architecture
+
+SmartGX is built as a **GXBank ecosystem enhancement**. It keeps the core structure of a digital banking system while adding an **AI-powered financial resilience layer** for saving behaviour, spending control, responsible borrowing, motivation, and security protection.
+
+### Frontend
+
+The frontend is built with:
+
+- **React Native** — cross-platform mobile app development
+- **Expo** — app development and device testing
+- **TypeScript** — safer and more maintainable code
+- **Expo Router** — screen navigation and routing
+- **Expo SecureStore** — secure local session storage
+
+The mobile app provides the user-facing banking experience, including account management, transfers, card flows, savings, GXHealth, FlexiCredit, gamification, campaigns, security, and SmartGX Assistant.
+
+### Backend & Data Layer
+
+The backend and data layer are supported by:
+
+- **Supabase Auth** — registration, login, and session persistence
+- **Supabase PostgreSQL** — storage for user profiles, balances, savings, transactions, notifications, GXHealth, FlexiCredit, gamification progress, and security settings
+
+This allows SmartGX to behave like a connected banking system instead of a static prototype.
 
 ### AI Server
 
-- Node.js
-- Express
-- Gemini API
-- Local AI proxy server
-- Rule-based fallback logic
+The AI layer is handled by:
+
+- **Node.js**
+- **Express**
+- **Gemini API**
+- **Local AI proxy server**
+- **Rule-based fallback logic**
+
+The AI server is separated from the mobile app so that API keys are not exposed in the frontend.
+
+### How SmartGX Builds on GXBank
+
+SmartGX follows the existing GXBank digital banking structure, then extends it with behavioural finance features:
+
+| GXBank Foundation | SmartGX Enhancement |
+|---|---|
+| Main Account | Real-time GXHealth-linked account behaviour |
+| Savings / Savings Pockets | Bonus, Emergency, Goals, auto allocation, streak rewards |
+| Debit Card | Debit card usage linked with AI spending risk |
+| FlexiCredit | AI Debt Readiness, Safe Drawdown, soft friction before borrowing |
+| Digital banking security | Security Score, Scam Protection, Device Safety Check, Emergency Lock |
+| Campaigns and rewards | Behaviour-based campaigns, SmartScore, Money Tree |
+
+In short:
+
+> **GXBank provides the digital banking foundation. SmartGX adds the AI-driven financial resilience layer on top of it.**
 
 ---
 
@@ -575,22 +625,17 @@ If Gemini is unavailable, SmartGX falls back to local rule-based logic.
 
 ---
 
-## 🧪 Recommended Demo Flow
+## 🚀 Future Enhancements
 
-1. Register or login
-2. Set up 6-digit PIN
-3. Show Dashboard overview
-4. Receive Income
-5. Show Auto Allocation in Saving
-6. Perform a risky payment or transfer
-7. Show AI Nudge and Soft Friction
-8. Show Transaction AI forecast
-9. Show FlexiCredit Debt Readiness
-10. Show Saving Streak, Money Tree, and Leaderboard
-11. Show Security Center
+1. **Real Banking API Integration**  
+   Integrate SmartGX with real GXBank banking APIs so balances, transfers, card activity, savings, and FlexiCredit data can be synchronized with actual banking records in real time.
 
+2. **Advanced AI Personalization**  
+   Expand the AI engine with long-term behavioural learning, personalized spending forecasts, adaptive saving plans, and more accurate debt-risk prediction based on each user’s historical financial behaviour.
+
+3. **Open Finance and Wider Ecosystem Integration**  
+   Connect SmartGX with external financial sources such as e-wallets, BNPL platforms, investment accounts, and credit records to provide a more complete view of the user’s financial health and detect hidden debt risks earlier.
 ---
-
 ## 📌 Case Study Impact
 
 SmartGX helps young users:
