@@ -39,6 +39,7 @@ Instead of only showing users what happened after they spent money, SmartGX acti
 - avoid using future money
 - reduce debt risk
 - participate in financial resilience campaigns
+- compete with friends through Challenge Garden
 - improve safe banking behaviour
 
 ---
@@ -112,6 +113,7 @@ SmartGX focuses on helping young users make better financial decisions before ri
 
 ---
 
+---
 ## ✨ Key Features
 
 - **Dashboard** with account overview, quick actions, latest activity, GXHealth, campaigns, and Money Tree
@@ -121,6 +123,7 @@ SmartGX focuses on helping young users make better financial decisions before ri
 - **AI Nudge & Soft Friction** for risky payments, transfers, credit usage, and borrowing
 - **FlexiCredit Debt Prevention** with eligibility check, document flow, AI Debt Readiness, drawdown, repayment, and interest calculation
 - **Gamification** with Saving Streak, SmartScore leaderboard, missions, water system, and Money Tree
+- **Challenge Garden** where friends compete in time-limited financial habit challenges, complete daily missions, grow separate challenge trees, and earn Bonus Rewards based on tree growth and Challenge SmartScore
 - **Campaigns** such as saving challenges, round-up challenges, and debt-free campaigns
 - **Security Center** with 6-digit PIN setup, Device Safety Check, Scam Protection, and Emergency Lock
 - **SmartGX Assistant** with quick questions and AI-powered prompt support
@@ -136,9 +139,9 @@ SmartGX focuses on helping young users make better financial decisions before ri
 
 ### AI, Debt Prevention & Engagement
 
-| AI Nudge | FlexiCredit Debt Readiness | Money Tree |
+| AI Nudge | FlexiCredit Debt Readiness | Challenge Garden |
 |---|---|---|
-| ![AI Nudge](./smartgx/assets/screenshots/ai-nudge.png) | ![FlexiCredit Debt Readiness](./smartgx/assets/screenshots/flexicredit.png) | ![Money Tree](./smartgx/assets/screenshots/money-tree.png) |
+| ![AI Nudge](./smartgx/assets/screenshots/ai-nudge.png) | ![FlexiCredit Debt Readiness](./smartgx/assets/screenshots/flexicredit.png) | ![Challenge Garden](./smartgx/assets/screenshots/challenge-garden.png) |
 
 ---
 
@@ -190,12 +193,11 @@ SmartGX follows the existing GXBank digital banking structure, then extends it w
 | Debit Card | Debit card usage linked with AI spending risk |
 | FlexiCredit | AI Debt Readiness, Safe Drawdown, soft friction before borrowing |
 | Digital banking security | Security Score, Scam Protection, Device Safety Check, Emergency Lock |
-| Campaigns and rewards | Behaviour-based campaigns, SmartScore, Money Tree |
+| Campaigns and rewards | Behaviour-based campaigns, SmartScore, Money Tree, and Challenge Garden |
 
 In short:
 
 > **GXBank provides the digital banking foundation. SmartGX adds the AI-driven financial resilience layer on top of it.**
-
 ---
 
 ## 📁 Project Structure
@@ -646,7 +648,8 @@ SmartGX helps young users:
 - avoid impulsive transactions
 - reduce risky credit usage
 - borrow more responsibly
-- stay motivated through rewards
+- stay motivated through rewards and friend-based challenges
+- build financial discipline through repeated daily missions
 - protect their account from scams and security risks
 
 ---
@@ -659,7 +662,7 @@ SmartGX helps young users:
 | Shows transactions | Analyzes financial behaviour |
 | Allows transfer | Checks risk before transfer |
 | Offers credit | Evaluates debt readiness |
-| Basic rewards | Saving Streak, Money Tree, SmartScore |
+| Basic rewards | Saving Streak, Money Tree, SmartScore, and Challenge Garden |
 | Basic security | Security Center and Scam Protection |
 
 ---
