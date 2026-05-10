@@ -11,14 +11,16 @@ interface ActivityState {
   clearActivities: () => void;
 }
 
-export const useActivityStore = create<ActivityState>((set) => ({
+export const useActivityStore = create<ActivityState>((set, get) => ({
   activities: [],
   addActivity: (activity) => {
-    const id = AUUID.test(activity.id) ? activity.id : randomUUIDCompat();
+    const id =
+      typeof activity.id === "string" && (AUUID.test(activity.id) || activity.id.startsWith("challenge-act-"))
+        ? activity.id
+        : randomUUIDCompat();
     const next = { ...activity, id };
-    set((s) => ({
-      activities: [next, ...s.activities],
-    }));
+    if (get().activities.some((a) => a.id === id)) return;
+    set((s) => ({ activities: [next, ...s.activities] }));
     const uid = getAuthUserId();
     if (uid) syncActivity(next);
   },

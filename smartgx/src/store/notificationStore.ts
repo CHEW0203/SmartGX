@@ -16,12 +16,16 @@ interface NotificationState {
   markAllAsRead:      () => void;
 }
 
-export const useNotificationStore = create<NotificationState>((set) => ({
+export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
   unreadCount:   0,
 
   addNotification: (notif) => {
-    const id = NUUID.test(notif.id) ? notif.id : randomUUIDCompat();
+    const id =
+      typeof notif.id === "string" && (NUUID.test(notif.id) || notif.id.startsWith("challenge-notif-"))
+        ? notif.id
+        : randomUUIDCompat();
+    if (get().notifications.some((n) => n.id === id)) return;
     const next = { ...notif, id };
     pushToastFromNotification({
       id: next.id,

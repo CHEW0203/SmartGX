@@ -7,6 +7,8 @@ import { useNotificationStore } from "../../store/notificationStore";
 import { useSavingsStore } from "../../store/savingsStore";
 import { useSecurityStore } from "../../store/securityStore";
 import { useTransactionStore } from "../../store/transactionStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useChallengeStore } from "../../store/challengeStore";
 import { DEFAULT_RULE } from "../../features/savings/savings.engine";
 
 /** Reset data stores when logging out (no mock seed). */
@@ -84,6 +86,9 @@ export function resetAllDataStores() {
     lastSyncedAt: null,
     scoreBreakdown: { gxHealth: 0, streak: 0, missions: 0, savingsGrowth: 0, debtBehavior: 0, repayment: 0, total: 420 },
   });
+
+  useChallengeStore.getState().reset();
+  void AsyncStorage.removeItem("smartgx_challenge_bundle_v1");
 
   useSecurityStore.setState({
     pinSetFromServer: false,

@@ -25,7 +25,9 @@ export type ActivityType =
   | "security_session"
   | "security_safety_check"
   | "security_scam_check"
-  | "security_lock";
+  | "security_lock"
+  | "challenge_started"
+  | "challenge_reward";
 
 export type ActivityDirection = "credit" | "debit";
 

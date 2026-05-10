@@ -17,6 +17,7 @@ export const useAuth = () => {
   const setAppPasscode = useAuthStore((s) => s.setAppPasscode);
   const changeAppPasscode = useAuthStore((s) => s.changeAppPasscode);
   const activateDemoAccount = useAuthStore((s) => s.activateDemoAccount);
+  const markProductGuideCompleted = useAuthStore((s) => s.markProductGuideCompleted);
 
   return {
     currentUser,
@@ -35,5 +36,6 @@ export const useAuth = () => {
     setAppPasscode,
     changeAppPasscode,
     activateDemoAccount,
+    markProductGuideCompleted,
   };
 };

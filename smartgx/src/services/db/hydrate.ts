@@ -7,6 +7,7 @@ import { useNotificationStore } from "../../store/notificationStore";
 import { useSavingsStore } from "../../store/savingsStore";
 import { useSecurityStore } from "../../store/securityStore";
 import { useTransactionStore } from "../../store/transactionStore";
+import { useChallengeStore } from "../../store/challengeStore";
 import type { AppActivity } from "../../types/activity";
 import type { AppNotification } from "../../types/notification";
 import type { FlexiCreditDrawdown, FlexiCreditRepaymentRecord } from "../../store/flexiCreditStore";
@@ -375,6 +376,9 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
         monthlySavedAmount: Number(streak.saved_this_month),
       });
     }
+
+    await useChallengeStore.getState().hydrateFromStorage();
+    await useChallengeStore.getState().hydrateFromSupabase(userId);
 
     return { ok: true };
   } catch (e) {

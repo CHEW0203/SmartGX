@@ -65,6 +65,10 @@ export function mapProfileToAuthUser(profile: UsersProfileRow, sessionUser: User
     mockNricLast4: x.mockNricLast4 as string | undefined,
     nationality: (x.nationality as string) ?? "Malaysian",
     ageConfirmed: Boolean(x.ageConfirmed),
+    productGuideCompleted:
+      typeof x.productGuideCompleted === "boolean"
+        ? x.productGuideCompleted
+        : Boolean(x.hasCompletedOnboarding),
   };
 }
 

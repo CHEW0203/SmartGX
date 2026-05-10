@@ -6,8 +6,10 @@ import { PrimaryButton } from "../../src/components/common/PrimaryButton";
 import { ScreenShell } from "../../src/components/common/ScreenShell";
 import { SmartCard } from "../../src/components/common/SmartCard";
 import { validatePasscode } from "../../src/features/auth/auth.rules";
+import { shouldShowProductGuide } from "../../src/features/auth/auth.service";
 import { weakPinReason } from "../../src/features/security/pin.rules";
 import { useAuth } from "../../src/hooks/useAuth";
+import { useAuthStore } from "../../src/store/authStore";
 import { useActivityStore } from "../../src/store/activityStore";
 import { useNotificationStore } from "../../src/store/notificationStore";
 import { useSecurityStore, userHasPinSet } from "../../src/store/securityStore";
@@ -25,7 +27,10 @@ export default function AppPinSetupScreen() {
   const [error, setError] = useState("");
 
   if (!isAuthenticated || !currentUser) return <Redirect href="/auth/login" />;
-  if (userHasPinSet()) return <Redirect href="/dashboard" />;
+  if (userHasPinSet()) {
+    const u = useAuthStore.getState().currentUser;
+    return <Redirect href={(shouldShowProductGuide(u) ? "/onboarding-guide" : "/dashboard") as never} />;
+  }
 
   const onNext = () => {
     const weak = weakPinReason(passcode);
@@ -66,7 +71,8 @@ export default function AppPinSetupScreen() {
       timestamp: new Date().toISOString(),
       route: "/security",
     });
-    router.replace("/dashboard" as never);
+    const u = useAuthStore.getState().currentUser;
+    router.replace((shouldShowProductGuide(u) ? "/onboarding-guide" : "/dashboard") as never);
   };
 
   const onRestart = () => {

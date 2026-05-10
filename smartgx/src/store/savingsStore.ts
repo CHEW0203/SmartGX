@@ -1,11 +1,31 @@
 import { create } from "zustand";
 import { calcAllocation, DEFAULT_RULE, ruleTotal } from "../features/savings/savings.engine";
-import type { AllocationRule, IncomeType, ManualIncome, SavingsActivity } from "../features/savings/savings.types";
+import type {
+  AllocationRule,
+  IncomeType,
+  ManualIncome,
+  SavingsActivity,
+} from "../features/savings/savings.types";
+
+/** Logged in Saving & Automation Recent Activity; duplicate ids are ignored. */
+export type BonusPocketCreditActivity = {
+  idempotencyKey: string;
+  label: string;
+  type: "challenge_reward" | "streak_reward" | "campaign_reward" | "bonus_credit";
+};
 import { getAuthUserId, persistSavingsRow } from "../services/db/persist";
 
 function maybePersistSavings() {
   const uid = getAuthUserId();
   if (uid) void persistSavingsRow(uid);
+}
+
+function touchChallengeProgress() {
+  const uid = getAuthUserId();
+  if (!uid) return;
+  // Lazy require avoids static cycle: savingsStore ↔ challengeStore (Metro require cycle warning).
+  const { useChallengeStore } = require("./challengeStore") as typeof import("./challengeStore");
+  useChallengeStore.getState().refreshProgressForUser(uid);
 }
 
 export interface SavingsBuckets {
@@ -72,6 +92,8 @@ interface SavingsState {
   toggleRoundUp: () => void;
   /** Manually transfer money from spending wallet into a saving bucket */
   manualSave: (destination: SavingsDestination, amount: number) => void;
+  /** Credit Bonus pocket from promotional / challenge rewards (does not debit Main). Optional activity row for Recent Activity. */
+  creditBonusPocket: (amount: number, activity?: BonusPocketCreditActivity) => void;
   withdrawFromBucket: (destination: SavingsDestination, amount: number) => {
     ok: boolean;
     reason?: "invalid_amount" | "insufficient_balance";
@@ -156,6 +178,40 @@ export const useSavingsStore = create<SavingsState>((set, get) => ({
           ? Math.round((s.pendingBonusBoost + Math.max(0, amount * 0.01)) * 100) / 100
           : s.pendingBonusBoost,
     }));
+    touchChallengeProgress();
+    maybePersistSavings();
+  },
+
+  creditBonusPocket: (amount, activity) => {
+    if (amount <= 0) return;
+    const rounded = Math.round(amount * 100) / 100;
+    set((s) => ({
+      savingsBuckets: {
+        ...s.savingsBuckets,
+        bonus: Math.round((s.savingsBuckets.bonus + rounded) * 100) / 100,
+      },
+    }));
+    if (activity) {
+      const dup = get().manualActivities.some((a) => a.id === activity.idempotencyKey);
+      if (!dup) {
+        const now = new Date().toISOString();
+        set((s) => ({
+          manualActivities: [
+            {
+              id: activity.idempotencyKey,
+              label: activity.label,
+              pocket: "Bonus",
+              amount: rounded,
+              date: now.slice(0, 10),
+              occurredAt: now,
+              type: activity.type,
+            },
+            ...s.manualActivities,
+          ],
+        }));
+      }
+    }
+    touchChallengeProgress();
     maybePersistSavings();
   },
 
@@ -233,11 +289,14 @@ export const useSavingsStore = create<SavingsState>((set, get) => ({
         [destination]: Math.round((s.savingsBuckets[destination] + roundUp) * 100) / 100,
       },
     }));
+    touchChallengeProgress();
     return { ok: true, saved: roundUp };
   },
 
-  addManualActivity: (entry) =>
-    set((s) => ({ manualActivities: [entry, ...s.manualActivities] })),
+  addManualActivity: (entry) => {
+    set((s) => ({ manualActivities: [entry, ...s.manualActivities] }));
+    maybePersistSavings();
+  },
 
   applyIncomeAutoAllocation: (input) => {
     const state = get();
@@ -301,6 +360,7 @@ export const useSavingsStore = create<SavingsState>((set, get) => ({
       },
     }));
 
+    touchChallengeProgress();
     maybePersistSavings();
     return { ok: true, spendingWallet: alloc.spendingWallet };
   },

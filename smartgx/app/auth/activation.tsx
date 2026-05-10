@@ -6,7 +6,9 @@ import { PrimaryButton } from "../../src/components/common/PrimaryButton";
 import { ScreenShell } from "../../src/components/common/ScreenShell";
 import { SmartCard } from "../../src/components/common/SmartCard";
 import { getOnboardingRoute, STEP } from "../../src/features/auth/onboarding.route";
+import { shouldShowProductGuide } from "../../src/features/auth/auth.service";
 import { useAuth } from "../../src/hooks/useAuth";
+import { useAuthStore } from "../../src/store/authStore";
 import { colors } from "../../src/theme/colors";
 import { spacing } from "../../src/theme/spacing";
 import { typography } from "../../src/theme/typography";
@@ -21,7 +23,12 @@ export default function ActivationScreen() {
 
   const onEnter = () => {
     activateDemoAccount();
-    router.replace("/dashboard");
+    const u = useAuthStore.getState().currentUser;
+    if (shouldShowProductGuide(u)) {
+      router.replace("/onboarding-guide" as never);
+    } else {
+      router.replace("/dashboard" as never);
+    }
   };
 
   return (

@@ -2,6 +2,7 @@ import type { HealthFactor, HealthInput, HealthStatus } from "../health/health.t
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "../../services/ai/ai.config";
 import { sanitizeAiCurrencyToRM } from "../../lib/aiText";
+import { userHasPinSet } from "../../store/securityStore";
 import type { GxHealthAiContextPayload } from "./gxhealthContext.builder";
 import type {
   GXHealthActionType,
@@ -63,7 +64,10 @@ export function buildGXHealthPrompt(_context: GxHealthAiContextPayload): string 
     "You are SmartGX AI, a financial behaviour assistant for Malaysian youth.",
     "Analyze the user's real-time financial behaviour using the JSON context only.",
     "Be specific, practical, and reference actual numbers and categories from context.",
-    "Explain WHY the GXHealth score is where it is, using the healthFactors and spending data.",
+    "CRITICAL: Distinguish Savings vs Emergency. The Savings factor is general (non-emergency) discipline: Bonus + Goals behaviour, flows into those pockets, allocation, round-up, streak, withdrawals from Bonus/Goals. The Emergency factor is emergency buffer strength (balance vs emergencyTargetRm and adequacyVsOneMonthTarget). Total account.totalSavings includes Bonus+Emergency+Goals, but you must NOT treat a rising Emergency balance as proof of stronger 'Savings' discipline — cite Emergency under the Emergency factor instead.",
+    "You may contrast them in prose, e.g. Bonus/Goals growing while Emergency is thin, or Emergency healthy while Bonus/Goals contributions are weak this month.",
+    "Explain WHY the GXHealth score is where it is, using all five healthFactors: Savings (non-emergency discipline), Spending, Emergency (buffer vs target), Debt Risk (FlexiCredit outstanding, limits, repayment due, overdue drawdowns), and Security (securityScore, PIN, device safety, scam protection, emergency lock).",
+    "If security.pinConfigured is true in context, do NOT recommend setting up a 6-digit PIN.",
     "Use Malaysian Ringgit format only. Write amounts as RM100, RM1,200, or RM5,000.",
     "Never use $, USD, dollars, or word 'cents' for currency unless the user explicitly asked.",
     "Do not claim to be a licensed financial adviser; stay supportive and clear.",
@@ -150,6 +154,49 @@ function tryParseGxHealthStructured(
   }
 }
 
+function isPinSetupRecommendationText(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    (t.includes("6") && t.includes("digit") && t.includes("pin") && (t.includes("set up") || t.includes("setup"))) ||
+    /set\s+up\s+your\s+6[\s-]*digit\s+pin/.test(t)
+  );
+}
+
+function stripPinSetupRecommendationsIfConfigured(
+  result: GXHealthAnalysisResult,
+  pinConfigured: boolean
+): GXHealthAnalysisResult {
+  if (!pinConfigured) return result;
+  const keepAction = (a: GXHealthRecommendedAction) =>
+    !(a.actionType === "security" && isPinSetupRecommendationText(`${a.title} ${a.reason}`));
+
+  const structured = result.structured
+    ? {
+        ...result.structured,
+        recommendedActions: result.structured.recommendedActions.filter(keepAction),
+      }
+    : null;
+
+  const fromStructured =
+    structured && structured.recommendedActions.length > 0
+      ? structured.recommendedActions.map((a) =>
+          a.reason && a.reason !== a.title ? `${a.title} — ${a.reason}` : a.title
+        )
+      : null;
+
+  const recommendedActions = (fromStructured ?? result.recommendedActions).filter(
+    (line) => !isPinSetupRecommendationText(line)
+  );
+
+  return {
+    ...result,
+    structured,
+    recommendedActions: recommendedActions.length > 0 ? recommendedActions : result.recommendedActions.filter(
+      (line) => !isPinSetupRecommendationText(line)
+    ),
+  };
+}
+
 function structuredToFallbackStrings(
   s: GXHealthStructuredAnalysis,
   tone: GXHealthAnalysisResult["tone"]
@@ -184,6 +231,7 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
   const topCat = extended.spending.top3Categories[0];
   const secondCat = extended.spending.top3Categories[1];
   const debtUsed = extended.credit.flexiCreditOutstanding + extended.credit.flexiCardUsed;
+  const secCtx = extended.security;
 
   const positiveSignals: string[] = [];
   if (extended.savingsBehaviour.savingStreakDays >= 3) {
@@ -191,7 +239,13 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
       `You are on a ${extended.savingsBehaviour.savingStreakDays}-day saving streak — consistency helps GXHealth.`
     );
   }
-  if (extended.account.emergency >= extended.monthlyOverview.totalExpensesThisMonth * 0.2 && extended.account.emergency > 0) {
+  const emergMo = extended.emergencyBuffer?.monthsOfSpendCovered ?? 0;
+  const emergRm = extended.emergencyBuffer?.emergencyBalanceRm ?? extended.account.emergency;
+  if (emergRm > 0 && emergMo >= 2) {
+    positiveSignals.push(
+      `Emergency pocket is about ${formatRm(emergRm)} (~${emergMo.toFixed(1)} months of spend covered) — a solid GXHealth buffer.`
+    );
+  } else if (extended.account.emergency >= extended.monthlyOverview.totalExpensesThisMonth * 0.2 && extended.account.emergency > 0) {
     positiveSignals.push(
       `Emergency pocket holds ${formatRm(extended.account.emergency)}, which adds buffer against shocks.`
     );
@@ -205,6 +259,9 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
     positiveSignals.push(
       `Month-to-date net cashflow is ${formatRm(cashflow)} with income of ${formatRm(extended.monthlyOverview.totalIncomeThisMonth)}.`
     );
+  }
+  if (secCtx.securityScore >= 80) {
+    positiveSignals.push(`Security Score ${secCtx.securityScore} — account protection is helping GXHealth.`);
   }
   if (positiveSignals.length === 0) {
     positiveSignals.push(`${strongest?.label ?? "Savings"} is currently your strongest GXHealth factor (${strongest?.statusLabel ?? "ok"}).`);
@@ -221,14 +278,26 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
   if (input.recentSpendTrend === "increasing") {
     riskSignals.push("Weekly spending pace is rising versus earlier in the month.");
   }
-  if (debtUsed > 0) {
+  if (debtUsed > 0 || extended.credit.flexiOverdueDrawdowns > 0) {
     riskSignals.push(
-      `Credit exposure is non-zero (FlexiCredit outstanding about ${formatRm(extended.credit.flexiCreditOutstanding)}, card used ${formatRm(extended.credit.flexiCardUsed)}).`
+      `FlexiCredit outstanding about ${formatRm(extended.credit.flexiCreditOutstanding)} on approved ${formatRm(extended.credit.flexiCreditApprovedLimit)}; monthly due ${formatRm(extended.credit.monthlyRepayment)}; card used ${formatRm(extended.credit.flexiCardUsed)}${
+        extended.credit.flexiOverdueDrawdowns > 0 ? `; ${extended.credit.flexiOverdueDrawdowns} overdue drawdown(s)` : ""
+      }.`
+    );
+  }
+  if (secCtx.securityScore < 70) {
+    riskSignals.push(
+      `Security Score is ${secCtx.securityScore} (${secCtx.pinConfigured ? "PIN set" : "PIN not set"}; device safety: ${secCtx.deviceSafetyStatus}; ${secCtx.scamProtectionSummary}).`
     );
   }
   if (main < extended.monthlyOverview.totalExpensesThisMonth * 0.15 && extended.monthlyOverview.totalExpensesThisMonth > 0) {
     riskSignals.push(
       `Main Account (${formatRm(main)}) is thin versus month spend (${formatRm(extended.monthlyOverview.totalExpensesThisMonth)}).`
+    );
+  }
+  if (emergMo < 1 && emergRm >= 0 && extended.monthlyOverview.totalExpensesThisMonth > 0) {
+    riskSignals.push(
+      `Emergency buffer is thin at ${formatRm(emergRm)} (~${emergMo.toFixed(1)} months of expenses) versus typical spend — this drags the Emergency GXHealth factor.`
     );
   }
   if (extended.riskBehaviour.saveInsteadCountThisMonth === 0 && extended.spending.byCategory["Shopping"] > extended.account.mainBalance * 0.25) {
@@ -269,6 +338,31 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
   }
 
   const maxRepay = extended.credit.flexiCreditOutstanding;
+  if (!secCtx.pinConfigured) {
+    recs.push({
+      title: "Set up your 6-digit PIN before using high-risk money movement",
+      reason: "PIN protects transfers, FlexiCredit, and sensitive actions.",
+      impact: "Raises Security Score and GXHealth Security factor.",
+      actionType: "security",
+    });
+  }
+  if (secCtx.deviceSafetyStatus !== "safe") {
+    recs.push({
+      title: "Complete Device Safety Check in Security Center",
+      reason: `Status is ${secCtx.deviceSafetyStatus} — unfinished checks pull down Security Score.`,
+      impact: "Improves Security factor and overall GXHealth.",
+      actionType: "security",
+    });
+  }
+  if (secCtx.securityScore < 65 && secCtx.scamProtectionSummary.toLowerCase().includes("high")) {
+    recs.push({
+      title: "Review Scam Protection — recent checks flagged higher risk",
+      reason: secCtx.scamProtectionSummary,
+      impact: "Reduces security drag on GXHealth.",
+      actionType: "security",
+    });
+  }
+
   if (maxRepay > 0 && main > 80) {
     const repay = clampMoveToMain(main, Math.min(maxRepay, Math.round(maxRepay * 0.15)), 40);
     if (repay >= 20) {
@@ -308,7 +402,7 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
     confidence: "medium",
   };
 
-  return structuredToFallbackStrings(structured, tone);
+  return stripPinSetupRecommendationsIfConfigured(structuredToFallbackStrings(structured, tone), secCtx.pinConfigured);
 }
 
 /**
@@ -318,6 +412,7 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
 export async function enrichGxHealthWithAi(context: GXHealthAnalysisContext): Promise<GXHealthAnalysisResult | null> {
   const config = getAiConfig();
   const base = gxHealthAnalysisFallback(context);
+  const pinOk = userHasPinSet();
   if (!config.enabled) return null;
 
   try {
@@ -329,20 +424,24 @@ export async function enrichGxHealthWithAi(context: GXHealthAnalysisContext): Pr
     const parsed = tryParseGxHealthStructured(res.content, res.structured ?? {});
     if (parsed) {
       const merged = structuredToFallbackStrings(parsed, base.tone);
-      return {
+      const withRecs = {
         ...merged,
         recommendedActions:
           merged.recommendedActions.length > 0 ? merged.recommendedActions : base.recommendedActions,
       };
+      return stripPinSetupRecommendationsIfConfigured(withRecs, pinOk);
     }
 
     const plain = sanitizeAiCurrencyToRM(res.content.trim().slice(0, 2000));
-    return {
-      ...base,
-      summaryAnalysis: plain.split("\n")[0] ?? plain,
-      aiBodyMultiline: plain,
-      structured: base.structured,
-    };
+    return stripPinSetupRecommendationsIfConfigured(
+      {
+        ...base,
+        summaryAnalysis: plain.split("\n")[0] ?? plain,
+        aiBodyMultiline: plain,
+        structured: base.structured,
+      },
+      pinOk
+    );
   } catch {
     return null;
   }

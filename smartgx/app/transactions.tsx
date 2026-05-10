@@ -33,6 +33,7 @@ import type { CategorySpendMap } from "../src/features/transactions/transactions
 import type { Transaction, TransactionCategory } from "../src/types/transaction";
 import type { IncomeType } from "../src/features/savings/savings.types";
 import { calcAllocation, ruleTotal } from "../src/features/savings/savings.engine";
+import { markChallengeInsightReviewed } from "../src/features/challenge/challengeIntegration";
 import {
   classifyIncomingReceipt,
   generateIncomingReceipt,
@@ -520,6 +521,11 @@ export default function TransactionsScreen() {
       cancelled = true;
     };
   }, [transactions, monthlyIncome, userId, monthlyBudget, insightOpts]);
+
+  useEffect(() => {
+    if (!userId || !aiInsight || aiInsight.length < 8) return;
+    markChallengeInsightReviewed(userId, new Date().toISOString().slice(0, 10));
+  }, [aiInsight, userId]);
 
   if (!currentUser) return <Redirect href="/auth/login" />;
 

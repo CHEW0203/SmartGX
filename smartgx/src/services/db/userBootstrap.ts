@@ -42,7 +42,7 @@ export async function createDefaultUserData(user: User, registerInput: RegisterI
   const accountRow = {
     user_id: uid,
     account_no: accountNoFor(uid),
-    main_balance: 50,
+    main_balance: 10,
     flexi_limit: 3000,
     flexi_used: 0,
     status: "active",

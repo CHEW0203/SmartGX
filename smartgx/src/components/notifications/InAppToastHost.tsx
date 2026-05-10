@@ -14,7 +14,7 @@ import { colors } from "../../theme/colors";
 import type { ToastPayload } from "../../store/toastStore";
 import { useToastStore } from "../../store/toastStore";
 
-const DISMISS_MS = 4500;
+const DISMISS_MS = 4000;
 const SWIPE_THRESHOLD = 48;
 
 function toastAccent(type: ToastPayload["type"]): string {
@@ -28,6 +28,8 @@ function toastAccent(type: ToastPayload["type"]): string {
       return "#FBBF24";
     case "risk":
       return "#F97316";
+    case "danger":
+      return "#EF4444";
     case "security":
       return "#38BDF8";
     default:
@@ -47,6 +49,8 @@ function toastIcon(type: ToastPayload["type"]): string {
       return "!";
     case "risk":
       return "⚠";
+    case "danger":
+      return "!";
     case "security":
       return "🔒";
     default:

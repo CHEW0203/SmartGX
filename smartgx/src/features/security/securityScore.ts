@@ -1,5 +1,6 @@
 import type { AuthUser } from "../auth/auth.types";
 import type { SecurityState } from "../../store/securityStore";
+import { useSecurityStore } from "../../store/securityStore";
 import { weakPinReason } from "./pin.rules";
 
 /** Fields from `SecurityState` used for scoring (no methods). */
@@ -37,15 +38,23 @@ export interface SecurityScoreBreakdown {
 }
 
 /** 0–100 score with human-readable breakdown rows for Security Center. */
+function resolveAppPin(user: AuthUser | null): { ok: boolean; weak: boolean } {
+  const pin = user?.passcode;
+  const fromMem = Boolean(pin && pin.length === 6 && /^\d{6}$/.test(pin));
+  const s = useSecurityStore.getState();
+  const fromServer = s.pinSetFromServer || (typeof s.serverPinHash === "string" && s.serverPinHash.length > 0);
+  const ok = fromMem || fromServer;
+  const weak = fromMem && Boolean(pin && weakPinReason(pin));
+  return { ok, weak };
+}
+
 export function computeSecurityScoreDetail(
   user: AuthUser | null,
   sec: SecurityScoreSnapshot
 ): { score: number; status: SecurityStatusLabel; breakdown: SecurityScoreBreakdown; factors: string[] } {
   const factors: string[] = [];
   let score = 0;
-  const pin = user?.passcode;
-  const pinOk = Boolean(pin && pin.length === 6 && /^\d{6}$/.test(pin));
-  const pinWeak = pinOk && weakPinReason(pin!);
+  const { ok: pinOk, weak: pinWeak } = resolveAppPin(user);
 
   let pinProtection = "Not set";
   if (pinOk) {

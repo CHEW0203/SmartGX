@@ -34,6 +34,8 @@ import {
   userHasPinSet,
   type SafetyCheckItem,
 } from "../src/store/securityStore";
+import { useAuthStore } from "../src/store/authStore";
+import { refreshChallengesForUser } from "../src/features/challenge/challengeIntegration";
 import { colors } from "../src/theme/colors";
 
 export default function SecurityScreen() {
@@ -96,22 +98,23 @@ export default function SecurityScreen() {
   const [reco, setReco] = useState(() =>
     generateSecurityRecommendation({
       emergencyLock: sec.emergencyLock,
-      pinSet: Boolean(currentUser?.passcode && currentUser.passcode.length === 6),
+      pinSet: userHasPinSet(),
       deviceTrusted: sec.deviceTrusted,
     })
   );
 
   useEffect(() => {
+    const pinSet = userHasPinSet();
     const base = generateSecurityRecommendation({
       emergencyLock: sec.emergencyLock,
-      pinSet: Boolean(currentUser?.passcode && currentUser.passcode.length === 6),
+      pinSet,
       deviceTrusted: sec.deviceTrusted,
     });
     setReco(base);
     let cancelled = false;
     void generateSecurityRecommendationWithGemini({
       emergencyLock: sec.emergencyLock,
-      pinSet: Boolean(currentUser?.passcode && currentUser.passcode.length === 6),
+      pinSet,
       deviceTrusted: sec.deviceTrusted,
     }).then((text) => {
       if (!cancelled) setReco(text);
@@ -119,7 +122,7 @@ export default function SecurityScreen() {
     return () => {
       cancelled = true;
     };
-  }, [sec.emergencyLock, sec.deviceTrusted, currentUser?.passcode]);
+  }, [sec.emergencyLock, sec.deviceTrusted, sec.pinSetFromServer, sec.serverPinHash, currentUser?.passcode]);
 
   const runSafety = () => {
     sec.setSafetyCheckRunning();
@@ -144,6 +147,7 @@ export default function SecurityScreen() {
       const failed = items.filter((i) => !i.ok).length;
       const status = failed === 0 ? "safe" : failed <= 2 ? "attention" : "risk";
       sec.setSafetyCheckResult(status, items);
+      refreshChallengesForUser(useAuthStore.getState().currentUser?.id);
     }, 1400);
   };
 

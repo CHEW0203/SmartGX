@@ -24,6 +24,17 @@ export interface GxHealthAiContextPayload {
     emergency: number;
     goals: number;
   };
+  /** Emergency pocket vs spending — for AI alongside Security and Debt */
+  emergencyBuffer: {
+    emergencyBalanceRm: number;
+    estimatedMonthlyExpensesRm: number;
+    monthsOfSpendCovered: number;
+    targetMonthsRecommended: number;
+    /** max(RM500, one month essential spend) */
+    emergencyTargetRm: number;
+    /** emergencyBalanceRm / emergencyTargetRm */
+    adequacyVsOneMonthTarget: number;
+  };
   gxHealth: {
     displayScore: number;
     rawScore: number;
@@ -52,6 +63,9 @@ export interface GxHealthAiContextPayload {
     roundUpTotal: number;
     latestAutoAllocationAmount: number | null;
     recentManualSaveCount: number;
+    monthBonusGoalsContributionsRm: number;
+    /** Plain-language separation of Savings vs Emergency scoring (for the model). */
+    savingsFactorScopeNote: string;
     allocationRulePercents: {
       spendingWallet: number;
       bonusPocket: number;
@@ -64,9 +78,21 @@ export interface GxHealthAiContextPayload {
     flexiCardLimit: number;
     flexiCreditUsed: number;
     flexiCreditLimit: number;
+    flexiCreditApprovedLimit: number;
     flexiCreditOutstanding: number;
+    flexiActiveDrawdowns: number;
+    flexiOverdueDrawdowns: number;
     nextRepaymentDate: string | null;
     monthlyRepayment: number;
+  };
+  security: {
+    securityScore: number;
+    pinConfigured: boolean;
+    deviceSafetyStatus: string;
+    scamProtectionSummary: string;
+    emergencyLock: boolean;
+    transactionAlertsEnabled: boolean;
+    deviceTrusted: boolean;
   };
   recentTransactions: GxHealthRiskTxnSummary[];
   riskyTransactions: GxHealthRiskTxnSummary[];
@@ -140,8 +166,18 @@ export function buildGxHealthAiContext(params: {
   flexiCreditUsed: number;
   flexiCreditLimit: number;
   flexiOutstanding: number;
+  flexiApprovedLimit: number;
+  flexiActiveDrawdowns: number;
+  flexiOverdueDrawdowns: number;
   nextRepaymentDate: string | null;
   monthlyRepayment: number;
+  securityScore: number;
+  pinConfigured: boolean;
+  deviceSafetyStatus: string;
+  scamProtectionSummary: string;
+  emergencyLock: boolean;
+  transactionAlertsEnabled: boolean;
+  deviceTrusted: boolean;
   savingStreakDays: number;
   roundUpEnabled: boolean;
   roundUpTotal: number;
@@ -196,6 +232,15 @@ export function buildGxHealthAiContext(params: {
   const totalSavings =
     round2(params.savingsBuckets.bonus + params.savingsBuckets.emergency + params.savingsBuckets.goals);
 
+  const monthlyExpEst = Math.max(
+    round2(params.input.monthlySpend),
+    round2(params.input.monthlyIncome * 0.6)
+  );
+  const emergBal = round2(params.savingsBuckets.emergency);
+  const monthsCov = monthlyExpEst > 0 ? round2(emergBal / monthlyExpEst) : 0;
+  const emergTarget = Math.max(500, monthlyExpEst);
+  const adequacyVsTarget = emergTarget > 0 ? round2(emergBal / emergTarget) : 0;
+
   return {
     currencyNote:
       "All amounts are Malaysian Ringgit (RM). Never use $, USD, or dollars in your reply.",
@@ -208,8 +253,16 @@ export function buildGxHealthAiContext(params: {
       mainBalance: round2(params.mainBalance),
       totalSavings,
       bonus: round2(params.savingsBuckets.bonus),
-      emergency: round2(params.savingsBuckets.emergency),
+      emergency: emergBal,
       goals: round2(params.savingsBuckets.goals),
+    },
+    emergencyBuffer: {
+      emergencyBalanceRm: emergBal,
+      estimatedMonthlyExpensesRm: monthlyExpEst,
+      monthsOfSpendCovered: monthsCov,
+      targetMonthsRecommended: 3,
+      emergencyTargetRm: round2(emergTarget),
+      adequacyVsOneMonthTarget: adequacyVsTarget,
     },
     gxHealth: {
       displayScore: Math.round(params.displayScore),
@@ -240,6 +293,9 @@ export function buildGxHealthAiContext(params: {
       latestAutoAllocationAmount:
         params.latestAutoAllocationAmount != null ? round2(params.latestAutoAllocationAmount) : null,
       recentManualSaveCount: params.recentManualSaveCount,
+      monthBonusGoalsContributionsRm: round2(params.input.savingsDiscipline.monthBonusGoalsContributionSum),
+      savingsFactorScopeNote:
+        "GXHealth 'Savings' measures general (non-emergency) saving discipline: Bonus + Goals balances and flows, allocation to Bonus/Goals, round-up, streak, and withdrawals from Bonus/Goals. 'Emergency' measures emergency buffer strength vs target max(RM500, one month essential spend). Total Savings = Bonus + Emergency + Goals for balances, but Emergency is not double-counted inside the Savings factor score.",
       allocationRulePercents: { ...params.allocationRulePercents },
     },
     credit: {
@@ -247,9 +303,21 @@ export function buildGxHealthAiContext(params: {
       flexiCardLimit: round2(params.flexiCardLimit),
       flexiCreditUsed: round2(params.flexiCreditUsed),
       flexiCreditLimit: round2(params.flexiCreditLimit),
+      flexiCreditApprovedLimit: round2(params.flexiApprovedLimit),
       flexiCreditOutstanding: round2(params.flexiOutstanding),
+      flexiActiveDrawdowns: params.flexiActiveDrawdowns,
+      flexiOverdueDrawdowns: params.flexiOverdueDrawdowns,
       nextRepaymentDate: params.nextRepaymentDate,
       monthlyRepayment: round2(params.monthlyRepayment),
+    },
+    security: {
+      securityScore: Math.round(params.securityScore),
+      pinConfigured: params.pinConfigured,
+      deviceSafetyStatus: params.deviceSafetyStatus,
+      scamProtectionSummary: params.scamProtectionSummary,
+      emergencyLock: params.emergencyLock,
+      transactionAlertsEnabled: params.transactionAlertsEnabled,
+      deviceTrusted: params.deviceTrusted,
     },
     recentTransactions: recent,
     riskyTransactions: risky,

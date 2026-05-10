@@ -154,14 +154,15 @@ export async function persistSecurityRow(userId: string): Promise<boolean> {
 export async function persistPinHash(userId: string, pinHash: string | null, pinSet: boolean): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb
-    .from("security_settings")
-    .update({
+  const { error } = await sb.from("security_settings").upsert(
+    {
+      user_id: userId,
       pin_hash: pinHash,
       pin_set: pinSet,
       updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
+    },
+    { onConflict: "user_id" }
+  );
   return !error;
 }
 

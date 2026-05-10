@@ -40,6 +40,8 @@ export interface BehaviourFlag {
 
 export interface TransactionHealthSignals {
   monthlySpend: number;
+  /** Count of `expense`-type transactions in the reporting month (excludes income-only / repayments-only noise for "no spend yet"). */
+  monthlyExpenseTransactionCount: number;
   topSpendCategory: string;
   topSpendCategoryRatio: number;
   recentSpendTrend: "increasing" | "stable" | "decreasing";
@@ -445,12 +447,16 @@ export function buildTransactionHealthSignals(
   userId: string
 ): TransactionHealthSignals {
   const { totalExpense } = aggregateMonthly(txns, userId);
+  const monthSlice = filterForMonth(txns, userId);
+  const monthlyExpenseTransactionCount = expenses(monthSlice).length;
   const categoryMap      = aggregateCategorySpend(txns, userId);
-  const { category: topCat, ratio: topRatio } = getTopCategory(categoryMap, totalExpense);
+  const expenseTotalForTop = expenses(monthSlice).reduce((s, t) => s + t.amount, 0);
+  const { category: topCat, ratio: topRatio } = getTopCategory(categoryMap, expenseTotalForTop);
   const trend = getSpendingTrend(txns, userId);
 
   return {
     monthlySpend:           totalExpense,
+    monthlyExpenseTransactionCount,
     topSpendCategory:       topCat,
     topSpendCategoryRatio:  topRatio,
     recentSpendTrend:       trend,

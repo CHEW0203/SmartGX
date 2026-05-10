@@ -845,6 +845,11 @@ function activityColor(type: SavingsActivity["type"]): string {
     case "roundup":    return "#22C55E";
     case "goal":       return "#F59E0B";
     case "withdrawal": return "#FB923C";
+    case "challenge_reward": return "#4ADE80";
+    case "streak_reward":
+    case "campaign_reward":
+    case "bonus_credit":
+      return "#34D399";
   }
 }
 

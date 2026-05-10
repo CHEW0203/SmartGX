@@ -108,6 +108,10 @@ export function AiNudgeModal({
     analysisResult &&
     (analysisResult.recommendation === "block" || analysisResult.recommendation === "delay");
 
+  /** High + Critical: full-width stacked Save Instead / Use Debit (same as Continue width). */
+  const useStackedFullWidthAltActions =
+    evaluation.riskLevel === "high" || evaluation.riskLevel === "critical";
+
   const onReasonChange = (text: string) => {
     setCriticalReason(text);
     setReasonError("");
@@ -264,24 +268,38 @@ export function AiNudgeModal({
               <Text style={styles.primaryText}>Continue</Text>
             </Pressable>
 
-            {(evaluation.recommendSaveInstead || showUseDebitInstead) && (
-              <View style={styles.row}>
-                {evaluation.recommendSaveInstead ? (
-                  <Pressable style={styles.altBtn} onPress={() => onDecision("save_instead")}>
-                    <Text style={styles.altText}>Save Instead</Text>
-                  </Pressable>
-                ) : (
-                  <View style={{ flex: 1 }} />
-                )}
-                {showUseDebitInstead ? (
-                  <Pressable style={styles.altBtn} onPress={() => onDecision("use_debit_instead")}>
-                    <Text style={styles.altText}>Use Debit Instead</Text>
-                  </Pressable>
-                ) : (
-                  <View style={{ flex: 1 }} />
-                )}
-              </View>
-            )}
+            {(evaluation.recommendSaveInstead || showUseDebitInstead) &&
+              (useStackedFullWidthAltActions ? (
+                <View style={styles.altActionsColumnHigh}>
+                  {evaluation.recommendSaveInstead ? (
+                    <Pressable style={styles.saveInsteadFullHigh} onPress={() => onDecision("save_instead")}>
+                      <Text style={styles.saveInsteadFullHighText}>Save Instead</Text>
+                    </Pressable>
+                  ) : null}
+                  {showUseDebitInstead ? (
+                    <Pressable style={styles.useDebitFullHigh} onPress={() => onDecision("use_debit_instead")}>
+                      <Text style={styles.useDebitFullHighText}>Use Debit Instead</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.row}>
+                  {evaluation.recommendSaveInstead ? (
+                    <Pressable style={styles.altBtn} onPress={() => onDecision("save_instead")}>
+                      <Text style={styles.altText}>Save Instead</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={{ flex: 1 }} />
+                  )}
+                  {showUseDebitInstead ? (
+                    <Pressable style={styles.altBtn} onPress={() => onDecision("use_debit_instead")}>
+                      <Text style={styles.altText}>Use Debit Instead</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={{ flex: 1 }} />
+                  )}
+                </View>
+              ))}
 
             {showTrySmaller ? (
               <Pressable style={styles.trySmallerBtn} onPress={() => onDecision("try_smaller_amount")}>
@@ -360,6 +378,35 @@ const styles = StyleSheet.create({
   countdown: { color: colors.textMuted, textAlign: "center", marginTop: 2 },
   countdownNum: { color: "#F59E0B", fontWeight: "800" },
   row: { flexDirection: "row", gap: 10, marginTop: 2 },
+  altActionsColumnHigh: {
+    width: "100%",
+    marginTop: 2,
+    gap: spacing.sm,
+  },
+  saveInsteadFullHigh: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.55)",
+    backgroundColor: "rgba(34,197,94,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  saveInsteadFullHighText: { color: "#22C55E", fontWeight: "800", fontSize: typography.body },
+  useDebitFullHigh: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.4)",
+    backgroundColor: "rgba(34,197,94,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  useDebitFullHighText: { color: "#22C55E", fontWeight: "700", fontSize: typography.body },
   cancelBtn: {
     flex: 1,
     minHeight: 48,

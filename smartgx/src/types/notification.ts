@@ -7,7 +7,10 @@ export type NotificationType =
   | "success"
   | "warning"
   | "reward"
-  | "campaign";
+  | "campaign"
+  | "challenge"
+  /** Friend passed your rank — urgent styling in inbox + toast. */
+  | "challenge_overtake";
 
 export interface AppNotification {
   id: string;

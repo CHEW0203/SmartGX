@@ -20,6 +20,7 @@ import { persistPinHash } from "../services/db/persist";
 import { hashAppPin } from "../services/db/pinCrypto";
 import { getSupabase } from "../lib/supabase";
 import { useSecurityStore } from "./securityStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const updateCurrentUser = (
   get: () => AuthState,
@@ -54,7 +55,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return { ok: false, message: "Profile not found. Complete registration or contact support." };
     }
 
-    const authUser = mapProfileToAuthUser(profile, res.user);
+    let authUser = mapProfileToAuthUser(profile, res.user);
+    try {
+      const raw = await AsyncStorage.getItem(`smartgx_product_guide_done_${authUser.id}`);
+      if (raw === "1") authUser = { ...authUser, productGuideCompleted: true };
+    } catch {
+      /* ignore */
+    }
     const h = await hydrateUserDataStores(res.user.id);
     if (!h.ok && __DEV__) console.warn("[SmartGX] hydrate after login", h.message);
 
@@ -87,10 +94,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const profile = await fetchUsersProfile(res.user.id);
     if (!profile) return { ok: false, message: "Could not load new profile." };
 
-    const authUser = mapProfileToAuthUser(profile, res.user);
+    let authUser = mapProfileToAuthUser(profile, res.user);
+    try {
+      const raw = await AsyncStorage.getItem(`smartgx_product_guide_done_${authUser.id}`);
+      if (raw === "1") authUser = { ...authUser, productGuideCompleted: true };
+    } catch {
+      /* ignore */
+    }
     await hydrateUserDataStores(res.user.id);
-
-    useSecurityStore.setState({ pinSetFromServer: false, serverPinHash: null });
 
     set({ currentUser: authUser, isAuthenticated: true, users: [] });
 
@@ -233,6 +244,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accountActivationStatus: "completed",
       onboardingStep: STEP.COMPLETE,
       hasCompletedOnboarding: true,
+      productGuideCompleted: false,
     });
     const u = get().currentUser;
     if (u) {
@@ -240,7 +252,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         accountActivationStatus: "completed",
         onboardingStep: STEP.COMPLETE,
         hasCompletedOnboarding: true,
+        productGuideCompleted: false,
       });
+      void AsyncStorage.setItem(`smartgx_product_guide_done_${u.id}`, "0");
+    }
+  },
+
+  markProductGuideCompleted: () => {
+    updateCurrentUser(get, set, { productGuideCompleted: true });
+    const u = get().currentUser;
+    if (u) {
+      void upsertProfileExtras(u.id, { productGuideCompleted: true });
+      void AsyncStorage.setItem(`smartgx_product_guide_done_${u.id}`, "1");
     }
   },
 }));

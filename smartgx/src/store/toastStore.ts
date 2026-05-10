@@ -13,6 +13,7 @@ export type ToastVisualType =
   | "success"
   | "warning"
   | "risk"
+  | "danger"
   | "security"
   | "reward"
   | "campaign"
@@ -28,9 +29,10 @@ interface ToastState {
 export const mapNotificationTypeToToast = (t: string): ToastVisualType => {
   if (t === "alert" || t === "warning") return "warning";
   if (t === "risk") return "risk";
+  if (t === "challenge_overtake") return "danger";
   if (t === "security") return "security";
   if (t === "reward") return "reward";
-  if (t === "campaign") return "campaign";
+  if (t === "campaign" || t === "challenge") return "campaign";
   if (t === "success") return "success";
   if (t === "insight") return "info";
   return "info";

@@ -10,21 +10,27 @@ import { useAccountStore } from "../store/accountStore";
 import { useFlexiCreditStore } from "../store/flexiCreditStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { useGamificationStore } from "../store/gamificationStore";
+import { useSecurityStore, userHasPinSet } from "../store/securityStore";
+import { computeSecurityScoreDetail } from "../features/security/securityScore";
 import {
   aggregateCategorySpend,
   aggregateMonthly,
   buildTransactionHealthSignals,
 } from "../features/transactions/transactions.engine";
 import { buildHealthInput, computeHealthReport } from "../features/health/health.engine";
+import {
+  buildEmergencyActivitySnapshot,
+  buildSavingsDisciplineSnapshot,
+} from "../features/health/health.savingsDiscipline";
 import type { HealthReport } from "../features/health/health.types";
 import { normalizeScore, safeNumber } from "../lib/number";
+import { DEFAULT_MONTHLY_INCOME } from "../lib/financialDefaults";
 import { enrichGxHealthWithAi, gxHealthAnalysisFallback } from "../features/ai/gxhealth.ai";
 import { buildGxHealthAiContext } from "../features/ai/gxhealthContext.builder";
 import { transactionOccurredMs, visibleHistoryTransactions } from "../lib/transactionTime";
 import type { GXHealthStructuredAnalysis } from "../features/ai/gxhealth.ai.types";
 
-/** When the user skips income during registration, budgeting uses 0 until allocation or declared income exists. */
-export const DEFAULT_MONTHLY_INCOME = 0;
+export { DEFAULT_MONTHLY_INCOME } from "../lib/financialDefaults";
 
 export function useHealthData(): HealthReport {
   const { currentUser } = useAuth();
@@ -44,7 +50,22 @@ export function useHealthData(): HealthReport {
   const flexiOutstanding = useFlexiCreditStore((s) => s.outstanding);
   const flexiNextDue = useFlexiCreditStore((s) => s.nextRepaymentDate);
   const flexiMonthlyRepay = useFlexiCreditStore((s) => s.monthlyRepayment);
-  const flexiDrawdowns = useFlexiCreditStore((s) => s.activeDrawdowns.length);
+  const flexiApprovedLimit = useFlexiCreditStore((s) => s.approvedLimit);
+  const flexiActiveDrawdowns = useFlexiCreditStore((s) => s.activeDrawdowns);
+  const flexiDrawdowns = flexiActiveDrawdowns.length;
+
+  const secDeviceTrusted = useSecurityStore((s) => s.deviceTrusted);
+  const secEmergencyLock = useSecurityStore((s) => s.emergencyLock);
+  const secTxAlerts = useSecurityStore((s) => s.transactionAlertsEnabled);
+  const secBioLocal = useSecurityStore((s) => s.biometricEnabledLocal);
+  const secMockSusp = useSecurityStore((s) => s.mockSuspiciousSession);
+  const secMockRisky = useSecurityStore((s) => s.mockRiskyLinkFlag);
+  const secSafety = useSecurityStore((s) => s.safetyCheckStatus);
+  const secWrongPins = useSecurityStore((s) => s.wrongPinAttempts);
+  const secLockUntil = useSecurityStore((s) => s.sensitiveLockUntil);
+  const secLastScam = useSecurityStore((s) => s.lastScamCheck);
+  const secPinFromServer = useSecurityStore((s) => s.pinSetFromServer);
+  const secServerPinHash = useSecurityStore((s) => s.serverPinHash);
 
   const notifications = useNotificationStore((s) => s.notifications);
   const currentStreak = useGamificationStore((s) => s.currentStreak);
@@ -59,32 +80,90 @@ export function useHealthData(): HealthReport {
       safeNumber(savingsBuckets.bonus, 0) +
       safeNumber(savingsBuckets.emergency, 0) +
       safeNumber(savingsBuckets.goals, 0);
-    const savingsRateFromRule = safeNumber(
-      (safeNumber(allocationRule.bonusPocket, 0) +
-        safeNumber(allocationRule.emergencyFund, 0) +
-        safeNumber(allocationRule.goalSavings, 0)) /
-        100,
-      0
-    );
-    const estimatedMonthlySavings = Math.max(0, safeNumber(Math.max(totalSavings, incomeBase * savingsRateFromRule), 0));
+    const savingsDiscipline = buildSavingsDisciplineSnapshot({
+      bonusBalance: safeNumber(savingsBuckets.bonus, 0),
+      goalsBalance: safeNumber(savingsBuckets.goals, 0),
+      monthlyIncomeRef: incomeBase,
+      manualActivities,
+      allocationRule: {
+        bonusPocket: safeNumber(allocationRule.bonusPocket, 0),
+        emergencyFund: safeNumber(allocationRule.emergencyFund, 0),
+        goalSavings: safeNumber(allocationRule.goalSavings, 0),
+      },
+      latestAutoAllocation,
+      roundUpEnabled,
+      roundUpTotal: safeNumber(roundUpTotal, 0),
+      savingStreakDays: safeNumber(currentStreak, 0),
+    });
+    const emergActivity = buildEmergencyActivitySnapshot(manualActivities);
     const debtExposure = safeNumber(flexiUsed, 0) + safeNumber(flexiCreditUsed, 0);
     const debtRatio = incomeBase > 0 ? Math.min(0.95, debtExposure / incomeBase) : 0.05;
 
     const transactionSignals = buildTransactionHealthSignals(transactions, incomeBase, userId);
 
+    const overdueN = flexiActiveDrawdowns.filter((d) => d.status === "overdue").length;
+    const flexiDebt = {
+      approvedLimit: safeNumber(flexiApprovedLimit, 0),
+      outstanding: safeNumber(flexiOutstanding, 0),
+      monthlyRepaymentDue: safeNumber(flexiMonthlyRepay, 0),
+      nextDueDate: flexiNextDue,
+      overdueCount: overdueN,
+      activeDrawdowns: flexiDrawdowns,
+    };
+
+    const secSnap = {
+      deviceTrusted: secDeviceTrusted,
+      emergencyLock: secEmergencyLock,
+      transactionAlertsEnabled: secTxAlerts,
+      biometricEnabledLocal: secBioLocal,
+      mockSuspiciousSession: secMockSusp,
+      mockRiskyLinkFlag: secMockRisky,
+      safetyCheckStatus: secSafety,
+      wrongPinAttempts: secWrongPins,
+      sensitiveLockUntil: secLockUntil,
+      lastScamCheck: secLastScam,
+    };
+    const secDetail = computeSecurityScoreDetail(currentUser, secSnap);
+    const pinOk = userHasPinSet();
+    const deviceSafety =
+      secSafety === "safe"
+        ? ("passed" as const)
+        : secSafety === "attention"
+          ? ("attention" as const)
+          : secSafety === "risk"
+            ? ("risk" as const)
+            : ("not_run" as const);
+
     return buildHealthInput({
       monthlyIncome: incomeBase,
-      monthlySavings: estimatedMonthlySavings,
+      monthlySavings: totalSavings,
       emergencyFundBalance: safeNumber(savingsBuckets.emergency, 0),
+      emergencyWithdrawalCountThisMonth: emergActivity.emergencyWithdrawalCountThisMonth,
+      emergencyWithdrawalAmountThisMonth: emergActivity.emergencyWithdrawalAmountThisMonth,
+      savingsDiscipline,
       safeBudget: Math.max(0, incomeBase * (safeNumber(allocationRule.spendingWallet, 60) / 100)),
       debtRatio,
+      mainBalance: safeNumber(mainBalance, 0),
+      flexiDebt,
+      cardCredit: { used: safeNumber(flexiUsed, 0), limit: safeNumber(flexiLimit, 0) },
+      security: {
+        score: secDetail.score,
+        pinConfigured: pinOk,
+        deviceSafety,
+        scamProtectionSummary: secDetail.breakdown.scamProtection,
+        emergencyLock: secEmergencyLock,
+      },
       transactionSignals,
     });
   }, [
     transactions,
     userId,
-    currentUser?.financialProfile?.monthlyIncome,
-    latestAutoAllocation?.amount,
+    currentUser,
+    latestAutoAllocation,
+    manualActivities,
+    roundUpEnabled,
+    roundUpTotal,
+    currentStreak,
     savingsBuckets.bonus,
     savingsBuckets.emergency,
     savingsBuckets.goals,
@@ -94,6 +173,26 @@ export function useHealthData(): HealthReport {
     allocationRule.spendingWallet,
     flexiUsed,
     flexiCreditUsed,
+    flexiLimit,
+    mainBalance,
+    flexiOutstanding,
+    flexiNextDue,
+    flexiMonthlyRepay,
+    flexiApprovedLimit,
+    flexiActiveDrawdowns,
+    flexiDrawdowns,
+    secDeviceTrusted,
+    secEmergencyLock,
+    secTxAlerts,
+    secBioLocal,
+    secMockSusp,
+    secMockRisky,
+    secSafety,
+    secWrongPins,
+    secLockUntil,
+    secLastScam,
+    secPinFromServer,
+    secServerPinHash,
   ]);
 
   const baseReport = useMemo(() => computeHealthReport(input), [input]);
@@ -147,52 +246,76 @@ export function useHealthData(): HealthReport {
   );
 
   const flexiCreditOutstandingForCtx = flexiOutstanding > 0 || flexiDrawdowns > 0 ? flexiOutstanding : flexiCreditUsed;
+  const flexiOverdueForCtx = flexiActiveDrawdowns.filter((d) => d.status === "overdue").length;
 
-  const extendedBase = useMemo(
-    () =>
-      buildGxHealthAiContext({
-        displayScore: reportNorm.score,
-        rawScore: baseReport.score,
-        status: baseReport.status,
-        previousScore: null,
-        scoreChange: null,
-        input,
-        factors: baseReport.factors,
-        mainBalance: safeNumber(mainBalance, 0),
-        savingsBuckets: {
-          bonus: safeNumber(savingsBuckets.bonus, 0),
-          emergency: safeNumber(savingsBuckets.emergency, 0),
-          goals: safeNumber(savingsBuckets.goals, 0),
-        },
-        employmentStatus: currentUser?.financialProfile?.employmentStatus,
-        allocationAccepted: currentUser?.financialProfile?.allocationAccepted ?? false,
-        monthlyIncomeDeclared: safeNumber(currentUser?.financialProfile?.monthlyIncome, DEFAULT_MONTHLY_INCOME),
-        allocationRulePercents: {
-          spendingWallet: safeNumber(allocationRule.spendingWallet, 0),
-          bonusPocket: safeNumber(allocationRule.bonusPocket, 0),
-          emergencyFund: safeNumber(allocationRule.emergencyFund, 0),
-          goalSavings: safeNumber(allocationRule.goalSavings, 0),
-        },
-        monthIncome: monthAgg.totalIncome,
-        monthExpense: monthAgg.totalExpense,
-        netCashflow: monthAgg.netCashflow,
-        categorySpend,
-        recentTransactions: recentTxForAi,
-        flexiCardUsed: safeNumber(flexiUsed, 0),
-        flexiCardLimit: safeNumber(flexiLimit, 0),
-        flexiCreditUsed: safeNumber(flexiCreditUsed, 0),
-        flexiCreditLimit: safeNumber(flexiCreditLimit, 0),
-        flexiOutstanding: safeNumber(flexiCreditOutstandingForCtx, 0),
-        nextRepaymentDate: flexiNextDue,
-        monthlyRepayment: safeNumber(flexiMonthlyRepay, 0),
-        savingStreakDays: safeNumber(currentStreak, 0),
-        roundUpEnabled,
-        roundUpTotal: safeNumber(roundUpTotal, 0),
-        latestAutoAllocationAmount: latestAutoAllocation?.amount ?? null,
-        recentManualSaveCount: manualActivities.filter((a) => a.type === "manual").slice(0, 14).length,
-        notificationsRiskCount14d: notificationsRisk14d,
-        campaigns: campaignSample,
-      }),
+  const extendedBase = useMemo(() => {
+    const secSnap = {
+      deviceTrusted: secDeviceTrusted,
+      emergencyLock: secEmergencyLock,
+      transactionAlertsEnabled: secTxAlerts,
+      biometricEnabledLocal: secBioLocal,
+      mockSuspiciousSession: secMockSusp,
+      mockRiskyLinkFlag: secMockRisky,
+      safetyCheckStatus: secSafety,
+      wrongPinAttempts: secWrongPins,
+      sensitiveLockUntil: secLockUntil,
+      lastScamCheck: secLastScam,
+    };
+    const secForAi = computeSecurityScoreDetail(currentUser, secSnap);
+    return buildGxHealthAiContext({
+      displayScore: reportNorm.score,
+      rawScore: baseReport.score,
+      status: baseReport.status,
+      previousScore: null,
+      scoreChange: null,
+      input,
+      factors: baseReport.factors,
+      mainBalance: safeNumber(mainBalance, 0),
+      savingsBuckets: {
+        bonus: safeNumber(savingsBuckets.bonus, 0),
+        emergency: safeNumber(savingsBuckets.emergency, 0),
+        goals: safeNumber(savingsBuckets.goals, 0),
+      },
+      employmentStatus: currentUser?.financialProfile?.employmentStatus,
+      allocationAccepted: currentUser?.financialProfile?.allocationAccepted ?? false,
+      monthlyIncomeDeclared: safeNumber(currentUser?.financialProfile?.monthlyIncome, DEFAULT_MONTHLY_INCOME),
+      allocationRulePercents: {
+        spendingWallet: safeNumber(allocationRule.spendingWallet, 0),
+        bonusPocket: safeNumber(allocationRule.bonusPocket, 0),
+        emergencyFund: safeNumber(allocationRule.emergencyFund, 0),
+        goalSavings: safeNumber(allocationRule.goalSavings, 0),
+      },
+      monthIncome: monthAgg.totalIncome,
+      monthExpense: monthAgg.totalExpense,
+      netCashflow: monthAgg.netCashflow,
+      categorySpend,
+      recentTransactions: recentTxForAi,
+      flexiCardUsed: safeNumber(flexiUsed, 0),
+      flexiCardLimit: safeNumber(flexiLimit, 0),
+      flexiCreditUsed: safeNumber(flexiCreditUsed, 0),
+      flexiCreditLimit: safeNumber(flexiCreditLimit, 0),
+      flexiOutstanding: safeNumber(flexiCreditOutstandingForCtx, 0),
+      flexiApprovedLimit: safeNumber(flexiApprovedLimit, 0),
+      flexiActiveDrawdowns: flexiDrawdowns,
+      flexiOverdueDrawdowns: flexiOverdueForCtx,
+      nextRepaymentDate: flexiNextDue,
+      monthlyRepayment: safeNumber(flexiMonthlyRepay, 0),
+      securityScore: secForAi.score,
+      pinConfigured: userHasPinSet(),
+      deviceSafetyStatus: secSafety,
+      scamProtectionSummary: secForAi.breakdown.scamProtection,
+      emergencyLock: secEmergencyLock,
+      transactionAlertsEnabled: secTxAlerts,
+      deviceTrusted: secDeviceTrusted,
+      savingStreakDays: safeNumber(currentStreak, 0),
+      roundUpEnabled,
+      roundUpTotal: safeNumber(roundUpTotal, 0),
+      latestAutoAllocationAmount: latestAutoAllocation?.amount ?? null,
+      recentManualSaveCount: manualActivities.filter((a) => a.type === "manual").slice(0, 14).length,
+      notificationsRiskCount14d: notificationsRisk14d,
+      campaigns: campaignSample,
+    });
+  },
     [
       reportNorm.score,
       baseReport.score,
@@ -203,6 +326,7 @@ export function useHealthData(): HealthReport {
       savingsBuckets.bonus,
       savingsBuckets.emergency,
       savingsBuckets.goals,
+      currentUser,
       currentUser?.financialProfile?.employmentStatus,
       currentUser?.financialProfile?.allocationAccepted,
       currentUser?.financialProfile?.monthlyIncome,
@@ -220,8 +344,24 @@ export function useHealthData(): HealthReport {
       flexiCreditUsed,
       flexiCreditLimit,
       flexiCreditOutstandingForCtx,
+      flexiApprovedLimit,
+      flexiDrawdowns,
+      flexiOverdueForCtx,
       flexiNextDue,
       flexiMonthlyRepay,
+      secDeviceTrusted,
+      secEmergencyLock,
+      secTxAlerts,
+      secBioLocal,
+      secMockSusp,
+      secMockRisky,
+      secSafety,
+      secWrongPins,
+      secLockUntil,
+      secLastScam,
+      currentUser?.passcode,
+      secPinFromServer,
+      secServerPinHash,
       currentStreak,
       roundUpEnabled,
       roundUpTotal,

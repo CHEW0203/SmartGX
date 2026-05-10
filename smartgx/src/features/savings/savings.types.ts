@@ -73,7 +73,16 @@ export interface SavingsActivity {
   amount: number;
   date:   string;
   occurredAt?: string;
-  type:   "auto" | "manual" | "roundup" | "goal" | "withdrawal";
+  type:
+    | "auto"
+    | "manual"
+    | "roundup"
+    | "goal"
+    | "withdrawal"
+    | "challenge_reward"
+    | "streak_reward"
+    | "campaign_reward"
+    | "bonus_credit";
 }
 
 /** One savings goal record */

@@ -16,12 +16,14 @@ import {
   type ReadinessLevel,
 } from "../src/features/flexiCredit/debtReadiness.service";
 import { formatRM } from "../src/lib/currency";
+import { safeNumber } from "../src/lib/number";
 import { colors } from "../src/theme/colors";
 import { radius } from "../src/theme/radius";
 import { spacing } from "../src/theme/spacing";
 import { typography } from "../src/theme/typography";
 import { verifyUserPin } from "../src/features/security/sensitiveAction";
 import { sensitiveActionBlockedMessage, userHasPinSet } from "../src/store/securityStore";
+import { refreshChallengesForUser } from "../src/features/challenge/challengeIntegration";
 
 type FlowStep =
   | "landing"
@@ -197,6 +199,16 @@ export default function FlexiCreditScreen() {
   const transactions = useTransactionStore();
   const activity = useActivityStore();
   const fc = useFlexiCreditStore();
+
+  const hasRepaymentDue = useMemo(() => {
+    const outstanding = safeNumber(fc.outstanding, 0);
+    const monthly = safeNumber(fc.monthlyRepayment, 0);
+    const anyPrincipal = fc.activeDrawdowns.some(
+      (d) =>
+        (d.status === "active" || d.status === "overdue") && safeNumber(d.remainingBalance, 0) > 0.01
+    );
+    return outstanding > 0.01 || monthly > 0.01 || anyPrincipal;
+  }, [fc.outstanding, fc.monthlyRepayment, fc.activeDrawdowns]);
 
   const [step, setStep] = useState<FlowStep>(fc.status === "activated" ? "manage" : "landing");
   const [statementOpen, setStatementOpen] = useState(false);
@@ -496,6 +508,17 @@ export default function FlexiCreditScreen() {
   };
 
   const openRepayPin = () => {
+    if (!hasRepaymentDue) {
+      notifications.addNotification({
+        id: `fc-no-repay-${Date.now()}`,
+        title: "No repayment due",
+        message: "Your FlexiCredit is fully repaid. There is no outstanding amount to pay.",
+        time: new Date().toISOString(),
+        read: false,
+        type: "info",
+      });
+      return;
+    }
     const block = sensitiveActionBlockedMessage();
     if (block) {
       notifications.addNotification({
@@ -607,9 +630,21 @@ export default function FlexiCreditScreen() {
       timestamp: new Date().toISOString(),
       route: "/flexicredit",
     });
+    refreshChallengesForUser(useAuthStore.getState().currentUser?.id);
   };
 
   const repayCore = () => {
+    if (!hasRepaymentDue) {
+      notifications.addNotification({
+        id: `fc-no-repay-core-${Date.now()}`,
+        title: "No repayment due",
+        message: "Nothing to repay right now.",
+        time: new Date().toISOString(),
+        read: false,
+        type: "info",
+      });
+      return;
+    }
     const target = fc.activeDrawdowns.find((d) => d.status === "active");
     const amount = Math.min((target?.monthlyRepayment ?? fc.monthlyRepayment ?? 200), account.mainBalance);
     if (amount <= 0) return;
@@ -1235,6 +1270,9 @@ export default function FlexiCreditScreen() {
             </Text>
             <FcKeyRow label="Next repayment date" value={fc.nextRepaymentDate ?? "—"} valueTone="accent" />
             <FcKeyRow label="Monthly repayment due" value={formatRM(fc.monthlyRepayment || 0)} valueTone="accent" />
+            {!hasRepaymentDue ? (
+              <Text style={styles.repayStatusHint}>Fully repaid — no repayment due right now.</Text>
+            ) : null}
             <TextInput style={styles.input} value={drawdownText} onChangeText={setDrawdownText} keyboardType="numeric" placeholder="Drawdown amount" placeholderTextColor={colors.textMuted} />
             <TextInput style={styles.input} value={tenureText} onChangeText={setTenureText} keyboardType="numeric" placeholder="Tenure months" placeholderTextColor={colors.textMuted} />
             <View style={styles.ctaColumn}>
@@ -1247,8 +1285,14 @@ export default function FlexiCreditScreen() {
               <Pressable style={styles.btn} onPress={openDrawdownPin}>
                 <Text style={styles.btnText}>Drawdown Funds</Text>
               </Pressable>
-              <Pressable style={styles.btnGhost} onPress={openRepayPin}>
-                <Text style={styles.btnGhostText}>Make Repayment</Text>
+              <Pressable
+                style={[styles.btnGhost, !hasRepaymentDue ? styles.btnDisabled : null]}
+                onPress={openRepayPin}
+                disabled={!hasRepaymentDue}
+              >
+                <Text style={[styles.btnGhostText, !hasRepaymentDue ? styles.btnGhostTextDisabled : null]}>
+                  {hasRepaymentDue ? "Make Repayment" : "No repayment due"}
+                </Text>
               </Pressable>
               <Pressable
                 style={styles.btnGhost}
@@ -1420,7 +1464,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   btnGhostText: { color: colors.textSecondary, fontWeight: "700", fontSize: typography.body, textAlign: "center" },
+  btnGhostTextDisabled: { color: colors.textMuted },
   btnDisabled: { opacity: 0.45 },
+  repayStatusHint: { color: "#4ADE80", fontSize: typography.caption, fontWeight: "700", marginTop: 4 },
   ctaRow: { flexDirection: "row", gap: 10, marginTop: spacing.sm },
   ctaColumn: { gap: 8, marginTop: spacing.sm },
   infoBox: {

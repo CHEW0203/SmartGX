@@ -89,6 +89,8 @@ export interface AuthUser {
   mockNricLast4?: string;
   nationality: string;
   ageConfirmed: boolean;
+  /** Product tour after activation; false = show guide once, true = completed or legacy user. */
+  productGuideCompleted?: boolean;
 }
 
 export interface LoginInput {
@@ -126,4 +128,6 @@ export interface AuthState {
   setAppPasscode: (passcode: string) => { ok: boolean; message?: string };
   changeAppPasscode: (currentPasscode: string, newPasscode: string, confirmNew: string) => { ok: boolean; message?: string };
   activateDemoAccount: () => void;
+  /** Mark first-time SmartGX product guide as finished (persists to profile_extras + local). */
+  markProductGuideCompleted: () => void;
 }

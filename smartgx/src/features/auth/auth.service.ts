@@ -20,9 +20,18 @@ export const findUserByCredentials = (
   );
 };
 
+/** After activation: show product guide when onboarding is complete but guide not yet finished. */
+export function shouldShowProductGuide(user: AuthUser | null): boolean {
+  if (!user?.hasCompletedOnboarding) return false;
+  return user.productGuideCompleted === false;
+}
+
 export const resolveLoginRoute = (user: AuthUser): string => {
   if (!user.hasCompletedOnboarding) return getOnboardingRoute(user.onboardingStep);
-  if (userHasPinSet()) return "/dashboard";
+  if (userHasPinSet()) {
+    if (shouldShowProductGuide(user)) return "/onboarding-guide";
+    return "/dashboard";
+  }
   return "/auth/app-pin-setup";
 };
 

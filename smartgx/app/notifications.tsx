@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useNotificationStore } from "../src/store/notificationStore";
 import type { AppNotification } from "../src/types/notification";
+import { formatNotificationTimestamp } from "../src/lib/formatNotificationTimestamp";
 import { colors } from "../src/theme/colors";
 import { radius } from "../src/theme/radius";
 import { spacing } from "../src/theme/spacing";
@@ -106,6 +107,30 @@ const TYPE_META: Record<
     icon: (
       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
         <Path d="M12 2V6M12 18V22M4.93 4.93L7.76 7.76M16.24 16.24L19.07 19.07M2 12H6M18 12H22M4.93 19.07L7.76 16.24M16.24 7.76L19.07 4.93" stroke="#38BDF8" strokeWidth="1.8" strokeLinecap="round" />
+      </Svg>
+    ),
+  },
+  challenge: {
+    color: "#FBBF24",
+    bg: "rgba(251,191,36,0.14)",
+    icon: (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Path d="M4 20L14 10M10 6L18 14M14 10L20 4M6 18L10 14" stroke="#FBBF24" strokeWidth="1.8" strokeLinecap="round" />
+        <Path d="M20 20L10 10M14 6L6 14M10 10L4 4M18 18L14 14" stroke="#D97706" strokeWidth="1.8" strokeLinecap="round" />
+      </Svg>
+    ),
+  },
+  challenge_overtake: {
+    color: "#EF4444",
+    bg: "rgba(239,68,68,0.16)",
+    icon: (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22Z"
+          stroke="#EF4444"
+          strokeWidth="1.8"
+        />
+        <Path d="M12 8V13M12 17H12.01" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" />
       </Svg>
     ),
   },
@@ -210,7 +235,7 @@ export default function NotificationsScreen() {
                     <Text style={styles.notifMessage} numberOfLines={2}>
                       {notif.message}
                     </Text>
-                    <Text style={styles.notifTime}>{notif.time}</Text>
+                    <Text style={styles.notifTime}>{formatNotificationTimestamp(notif.time)}</Text>
                   </View>
 
                   {/* Delete button */}

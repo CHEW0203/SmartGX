@@ -40,7 +40,7 @@ function r2(n: number) {
 
 export const useAccountStore = create<AccountState>((set, get) => ({
   // New account defaults (credit line for My Card TapPay demo)
-  mainBalance: 50,
+  mainBalance: 10,
   flexiLimit:  DEFAULT_CREDIT_CARD_LIMIT,
   flexiUsed:   0,
   debitDailyLimit: DEFAULT_DEBIT_DAILY_LIMIT,

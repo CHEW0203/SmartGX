@@ -7,7 +7,7 @@ import { computeSecurityScore } from "../src/features/security/securityScore";
 import { useAuth } from "../src/hooks/useAuth";
 import { useHealthData } from "../src/hooks/useHealthData";
 import { useGamificationStore } from "../src/store/gamificationStore";
-import { useSecurityStore } from "../src/store/securityStore";
+import { useSecurityStore, userHasPinSet } from "../src/store/securityStore";
 import { colors } from "../src/theme/colors";
 import { spacing } from "../src/theme/spacing";
 import { typography } from "../src/theme/typography";
@@ -25,7 +25,7 @@ export default function ProfileScreen() {
 
   const secScore = computeSecurityScore(currentUser, useSecurityStore.getState());
   const initial = (currentUser.fullName ?? "U").trim().charAt(0).toUpperCase();
-  const pinOk = Boolean(currentUser.passcode && currentUser.passcode.length === 6);
+  const pinOk = userHasPinSet();
 
   const onLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -96,6 +96,12 @@ export default function ProfileScreen() {
         </Section>
 
         <Section title="Help">
+          <Pressable
+            style={s.linkRow}
+            onPress={() => router.push("/onboarding-guide?replay=1" as never)}
+          >
+            <Text style={s.linkText}>SmartGX guide (handbook)</Text>
+          </Pressable>
           <Pressable style={s.linkRow} onPress={() => router.push("/chatnow" as never)}>
             <Text style={s.linkText}>ChatNow & FAQ</Text>
           </Pressable>

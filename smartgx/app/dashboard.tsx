@@ -1,7 +1,18 @@
 import React from "react";
 import { Redirect, router, usePathname } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import {
+  AccessibilityInfo,
+  Animated,
+  Dimensions,
+  Easing,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { useAuth } from "../src/hooks/useAuth";
@@ -21,8 +32,18 @@ import { radius } from "../src/theme/radius";
 import { spacing } from "../src/theme/spacing";
 import { typography } from "../src/theme/typography";
 import { explainTreeHealth } from "../src/features/ai/gamification.ai";
+import { useChallengeStore } from "../src/store/challengeStore";
 
 /* ─── SVG Icon Components ─────────────────────────────────────────── */
+
+function ChallengeSwordsIcon({ size = 26, color = "#7C5E1A" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 20L14 10M10 6L18 14M14 10L20 4M6 18L10 14" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Path d="M20 20L10 10M14 6L6 14M10 10L4 4M18 18L14 14" stroke="#A67C29" strokeWidth="2" strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 function AddIncomeIcon({ size = 22, color = "#FFFFFF" }: { size?: number; color?: string }) {
   return (
@@ -174,6 +195,24 @@ function BellIcon({ size = 20, color = "#C4B5FD" }: { size?: number; color?: str
   );
 }
 
+function useReduceMotionEnabled(): boolean {
+  const [enabled, setEnabled] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => {
+        if (!cancelled) setEnabled(v);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setEnabled);
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, []);
+  return enabled;
+}
+
 /* ─── Screen ──────────────────────────────────────────────────────── */
 
 export default function DashboardScreen() {
@@ -202,6 +241,9 @@ export default function DashboardScreen() {
   const gamifyStreakForMilestones = useGamificationStore((s) => s.currentStreak);
   const gamifyAutoCreditedKey = useGamificationStore((s) => s.autoCreditedStreakMilestones.join(","));
   const healthReport     = useHealthData();
+  const challenges = useChallengeStore((s) => s.challenges);
+  const refreshChallengeProgress = useChallengeStore((s) => s.refreshProgressForUser);
+  const finalizeChallengeIfNeeded = useChallengeStore((s) => s.finalizeChallengeIfNeeded);
 
   const safeHealthScore = normalizeScore(healthReport.score, 70);
   const safeSmartScore = normalizeSmartScore(gamifySmartScore, 420);
@@ -219,6 +261,29 @@ export default function DashboardScreen() {
     return idx >= 0 ? idx + 1 : 1;
   }, [safeSmartScore, gamifyFriends]);
 
+  const activeFriendChallenge = React.useMemo(() => {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const t = new Date().toISOString().slice(0, 10);
+    return (
+      challenges.find(
+        (c) =>
+          c.status === "active" &&
+          t >= c.startDate &&
+          t <= c.endDate &&
+          c.participants.some((p) => p.userId === uid && p.inviteStatus === "accepted")
+      ) ?? null
+    );
+  }, [challenges, currentUser?.id]);
+
+  React.useEffect(() => {
+    if (!currentUser?.id) return;
+    refreshChallengeProgress(currentUser.id);
+    for (const c of useChallengeStore.getState().challenges) {
+      finalizeChallengeIfNeeded(c.id);
+    }
+  }, [currentUser?.id, pathname, sharedActivities.length, refreshChallengeProgress, finalizeChallengeIfNeeded]);
+
   const bonusBalance     = savingsBuckets.bonus;
   const emergencyBalance = savingsBuckets.emergency;
   const goalBalance      = savingsBuckets.goals;
@@ -235,6 +300,30 @@ export default function DashboardScreen() {
   const missionCompletedCount = gamifyMissions.filter((m) => m.completed).length;
   const riskyDrawdownCount = sharedActivities.filter((a) => a.type === "flexicredit_drawdown").length;
   const [treeAiLine, setTreeAiLine] = React.useState<string | null>(null);
+  const reduceMotion = useReduceMotionEnabled();
+  const screenW = Dimensions.get("window").width;
+  const heroSweepX = React.useRef(new Animated.Value(-80)).current;
+
+  React.useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heroSweepX, {
+          toValue: screenW + 100,
+          duration: 4200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroSweepX, {
+          toValue: -80,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, screenW, heroSweepX]);
 
   const activities = React.useMemo(
     () =>
@@ -272,7 +361,11 @@ export default function DashboardScreen() {
     const addNotification = useNotificationStore.getState().addNotification;
     const addActivity = useActivityStore.getState().addActivity;
     for (const e of earned) {
-      useSavingsStore.getState().manualSave("bonus", e.bonus);
+      useSavingsStore.getState().creditBonusPocket(e.bonus, {
+        idempotencyKey: `sv-streak-auto-${e.id}`,
+        label: `Streak Reward — milestone ${e.id.replace(/^streak-/, "")} credited to Bonus`,
+        type: "streak_reward",
+      });
       addNotification({
         id: `notif-streak-auto-${e.id}-${Date.now()}`,
         title: "Streak Reward Credited",
@@ -303,7 +396,13 @@ export default function DashboardScreen() {
       const addNotification = useNotificationStore.getState().addNotification;
       const addActivity = useActivityStore.getState().addActivity;
       for (const r of rewards) {
-        if (r.bonus > 0) useSavingsStore.getState().manualSave("bonus", r.bonus);
+        if (r.bonus > 0) {
+          useSavingsStore.getState().creditBonusPocket(r.bonus, {
+            idempotencyKey: `sv-campaign-${r.id}`,
+            label: `Campaign Reward — ${r.title}`,
+            type: "campaign_reward",
+          });
+        }
         addNotification({
           id: `notif-camp-${r.id}-${Date.now()}`,
           title: "Campaign completed",
@@ -344,7 +443,12 @@ export default function DashboardScreen() {
     });
     if (res.leveledUp) {
       if (res.levelReward > 0) {
-        useSavingsStore.getState().manualSave("bonus", res.levelReward);
+        const lvl = useGamificationStore.getState().treeLevel;
+        useSavingsStore.getState().creditBonusPocket(res.levelReward, {
+          idempotencyKey: `sv-money-tree-lvl-${lvl}`,
+          label: `Money Tree level ${lvl} reward credited to Bonus`,
+          type: "bonus_credit",
+        });
       }
       activityStore.addActivity({
         id: `act-tree-level-${Date.now()}`,
@@ -392,6 +496,18 @@ export default function DashboardScreen() {
         >
           {/* Subtle top tint overlay for depth */}
           <View style={styles.heroTint} pointerEvents="none" />
+          {!reduceMotion ? (
+            <View style={styles.heroLightSweepClip} pointerEvents="none">
+              <Animated.View style={[styles.heroLightSweepBand, { transform: [{ translateX: heroSweepX }] }]}>
+                <LinearGradient
+                  colors={["transparent", "rgba(255,255,255,0.13)", "transparent"]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
+            </View>
+          ) : null}
 
           {/* Top bar */}
           <View style={styles.topBar}>
@@ -567,8 +683,10 @@ export default function DashboardScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
+            decelerationRate="normal"
             snapToInterval={320}
+            snapToAlignment="start"
+            scrollEventThrottle={16}
             contentContainerStyle={styles.flexiCarouselContent}
           >
             <Pressable style={styles.flexiCreditCard} onPress={() => router.push("/flexicredit" as never)}>
@@ -665,7 +783,9 @@ export default function DashboardScreen() {
                 <Text style={styles.treeMeta}>Health {gamifyTreeHealth}/100</Text>
                 <Text style={styles.treeMeta}>EXP {gamifyTreeExp}/100</Text>
                 <View style={styles.waterRow}>
-                  <Text style={styles.treeMeta}>Water 💧 {gamifyWater}</Text>
+                  <Text style={styles.treeMeta}>
+                    Water <Text style={styles.treeMetaWaterAmt}>+{gamifyWater}</Text>
+                  </Text>
                   <View style={styles.missionIconWrap}>
                     <Pressable style={styles.waterPlusBtn} onPress={() => router.push("/missions" as never)}>
                       <Text style={styles.waterPlusText}>+</Text>
@@ -692,6 +812,23 @@ export default function DashboardScreen() {
               {hasUnclaimedMissionReward ? <View style={styles.notifyDotOnButton} /> : null}
             </View>
           </View>
+          <Pressable
+            style={styles.challengeFriendsCard}
+            onPress={() =>
+              activeFriendChallenge
+                ? router.push(`/challenge-garden?id=${encodeURIComponent(activeFriendChallenge.id)}` as never)
+                : router.push("/challenge-hub" as never)
+            }
+          >
+            <View style={styles.challengeFriendsIconWrap}>
+              <ChallengeSwordsIcon size={28} color="#6B4E16" />
+            </View>
+            <View style={styles.challengeFriendsTextCol}>
+              <Text style={styles.challengeFriendsTitle}>Challenge Garden</Text>
+              <Text style={styles.challengeFriendsSub}>Compete, grow, and earn Bonus Rewards</Text>
+            </View>
+            <Text style={styles.challengeFriendsChev}>›</Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -760,6 +897,17 @@ const styles = StyleSheet.create({
   heroTint: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(90, 30, 180, 0.06)",
+  },
+  heroLightSweepClip: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  heroLightSweepBand: {
+    position: "absolute",
+    width: 64,
+    top: 0,
+    bottom: 0,
+    left: 0,
   },
   topBar: {
     flexDirection: "row",
@@ -1047,6 +1195,37 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  challengeFriendsCard: {
+    marginTop: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: "#F3E8C8",
+    borderWidth: 1,
+    borderColor: "rgba(180, 140, 70, 0.45)",
+    shadowColor: "#B45309",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  challengeFriendsIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(120, 90, 30, 0.2)",
+  },
+  challengeFriendsTextCol: { flex: 1, gap: 2 },
+  challengeFriendsTitle: { color: "#3F2E0A", fontSize: 16, fontWeight: "900", letterSpacing: -0.2 },
+  challengeFriendsSub: { color: "rgba(80, 60, 20, 0.82)", fontSize: 12, fontWeight: "600", lineHeight: 16 },
+  challengeFriendsChev: { color: "rgba(80, 60, 20, 0.55)", fontSize: 28, fontWeight: "300", marginRight: 4 },
   treeTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   treeHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
   treeRankChip: {
@@ -1138,6 +1317,7 @@ const styles = StyleSheet.create({
   },
   waterPlusText: { color: "#22D3EE", fontWeight: "900", lineHeight: 16, marginTop: -1 },
   treeMeta: { color: "#CFC5EA", fontSize: typography.caption, fontWeight: "600" },
+  treeMetaWaterAmt: { fontWeight: "900", color: "#22D3EE" },
   expTrack: { height: 8, backgroundColor: "#2A1F42", borderRadius: 99, overflow: "hidden", marginTop: 2 },
   expFill: { height: "100%", backgroundColor: "#22D3EE" },
   treeStateText: { color: "#8BDEFF", fontSize: typography.caption, fontWeight: "700" },
