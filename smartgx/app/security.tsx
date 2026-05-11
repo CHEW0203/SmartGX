@@ -345,10 +345,8 @@ export default function SecurityScreen() {
                 ]}>
                   {sec.lastScamCheck.risk.toUpperCase()}
                 </Text>
-                {sec.lastScamCheck.provider ? (
-                  <Text style={s.providerLabel}>
-                    AI: {sec.lastScamCheck.provider === "gemini" ? "Gemini" : "Fallback"}
-                  </Text>
+                {sec.lastScamCheck.provider === "gemini" ? (
+                  <Text style={s.providerLabel}>AI: Gemini</Text>
                 ) : null}
               </View>
               <Text style={s.resultExplanation}>{sec.lastScamCheck.explanation}</Text>
