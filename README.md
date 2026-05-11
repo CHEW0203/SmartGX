@@ -4,7 +4,7 @@ SmartGX is an AI-powered financial resilience banking prototype built on top of 
 
 SmartGX extends GXBank’s digital banking foundation by adding a proactive financial behaviour layer that guides users before they overspend, overborrow, or face financial risk.
 
----
+
 
 ## 🚀 One-Line Pitch
 
@@ -13,7 +13,7 @@ SmartGX extends GXBank’s digital banking foundation by adding a proactive fina
 ---
 ## 🎬 Prototype Demo Video
 
-🎥[Watch Our 5 minutes demo video HERE](https://your-video-link.com)
+🎥[Watch Our 5 minutes demo video HERE](https://youtu.be/8zM1xC5kqQ0?si=5xzUD95X2EAOJWQg)
 
 ---
 
