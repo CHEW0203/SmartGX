@@ -5,6 +5,7 @@ import {
   generateTransactionInsight,
   type TransactionInsightContext,
   type TransactionInsightRecentTxn,
+  type TransactionInsightResult,
 } from "../ai/transactionInsight.ai";
 import { computeMonthSpendForecast } from "./transactionForecast";
 
@@ -274,6 +275,9 @@ export function detectBehaviours(
 export interface TransactionInsightBuildOpts {
   mainBalance: number;
   totalSavings: number;
+  emergencyBalance?: number;
+  bonusBalance?: number;
+  goalsBalance?: number;
   gxHealthScore: number;
   flexiCreditOutstanding: number;
   flexiCardUsed: number;
@@ -378,6 +382,9 @@ export function buildTransactionInsightContext(
       opts.flexiCreditOutstanding > 0,
     mainAccountBalance: opts.mainBalance,
     totalSavings: opts.totalSavings,
+    emergencyBalance: opts.emergencyBalance,
+    bonusBalance: opts.bonusBalance,
+    goalsBalance: opts.goalsBalance,
     gxHealthScore: opts.gxHealthScore,
     forecast,
     top3ExpenseCategories,
@@ -427,6 +434,34 @@ export async function generateAIInsightAsync(
   }
   const insight = await enrichTransactionInsightWithGemini(ctx);
   return insight.displayBody;
+}
+
+/** Returns the full structured insight object for rich UI display. */
+export function generateAIInsightStructured(
+  txns: Transaction[],
+  monthlyIncome: number,
+  userId: string,
+  monthlyBudget: number | null = null,
+  insightOpts: TransactionInsightBuildOpts
+): TransactionInsightResult | null {
+  void monthlyIncome;
+  const ctx = buildTransactionInsightContext(txns, userId, monthlyBudget, insightOpts);
+  if (!ctx) return null;
+  return generateTransactionInsight(ctx);
+}
+
+/** Async version returning full structured insight (Gemini-enriched). */
+export async function generateAIInsightStructuredAsync(
+  txns: Transaction[],
+  monthlyIncome: number,
+  userId: string,
+  monthlyBudget: number | null = null,
+  insightOpts: TransactionInsightBuildOpts
+): Promise<TransactionInsightResult | null> {
+  void monthlyIncome;
+  const ctx = buildTransactionInsightContext(txns, userId, monthlyBudget, insightOpts);
+  if (!ctx) return null;
+  return enrichTransactionInsightWithGemini(ctx);
 }
 
 function week2TotalSpend(monthExpenses: Transaction[]): number {

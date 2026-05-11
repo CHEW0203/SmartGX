@@ -24,11 +24,13 @@ import {
   aggregateMonthly,
   aggregateCategorySpend,
   currentReportingMonthPrefix,
-  generateAIInsight,
-  generateAIInsightAsync,
+  generateAIInsightStructured,
+  generateAIInsightStructuredAsync,
   getTransactionRiskLabel,
   type TransactionInsightBuildOpts,
 } from "../src/features/transactions/transactions.engine";
+import type { TransactionInsightResult } from "../src/features/ai/transactionInsight.ai";
+import { InsightDisplay } from "../src/components/transactions/InsightDisplay";
 import type { CategorySpendMap } from "../src/features/transactions/transactions.engine";
 import type { Transaction, TransactionCategory } from "../src/types/transaction";
 import type { IncomeType } from "../src/features/savings/savings.types";
@@ -485,6 +487,9 @@ export default function TransactionsScreen() {
     return {
       mainBalance,
       totalSavings,
+      emergencyBalance: savingsBuckets.emergency ?? 0,
+      bonusBalance: savingsBuckets.bonus ?? 0,
+      goalsBalance: savingsBuckets.goals ?? 0,
       gxHealthScore: healthReport.score,
       flexiCreditOutstanding: outstanding,
       flexiCardUsed: flexiCardUsed,
@@ -505,17 +510,18 @@ export default function TransactionsScreen() {
     flexiMonthlyRepay,
   ]);
 
-  const [aiInsight, setAiInsight] = useState("");
+  const [insightResult, setInsightResult] = useState<TransactionInsightResult | null>(null);
 
   useEffect(() => {
     if (!userId) {
-      setAiInsight("");
+      setInsightResult(null);
       return;
     }
-    setAiInsight(generateAIInsight(transactions, monthlyIncome, userId, monthlyBudget, insightOpts));
+    const sync = generateAIInsightStructured(transactions, monthlyIncome, userId, monthlyBudget, insightOpts);
+    setInsightResult(sync);
     let cancelled = false;
-    void generateAIInsightAsync(transactions, monthlyIncome, userId, monthlyBudget, insightOpts).then((text) => {
-      if (!cancelled) setAiInsight(text);
+    void generateAIInsightStructuredAsync(transactions, monthlyIncome, userId, monthlyBudget, insightOpts).then((r) => {
+      if (!cancelled) setInsightResult(r);
     });
     return () => {
       cancelled = true;
@@ -523,9 +529,9 @@ export default function TransactionsScreen() {
   }, [transactions, monthlyIncome, userId, monthlyBudget, insightOpts]);
 
   useEffect(() => {
-    if (!userId || !aiInsight || aiInsight.length < 8) return;
+    if (!userId || !insightResult?.displayBody || insightResult.displayBody.length < 8) return;
     markChallengeInsightReviewed(userId, new Date().toISOString().slice(0, 10));
-  }, [aiInsight, userId]);
+  }, [insightResult, userId]);
 
   if (!currentUser) return <Redirect href="/auth/login" />;
 
@@ -786,9 +792,12 @@ export default function TransactionsScreen() {
             <View style={styles.insightIconWrap}>
               <Text style={styles.insightIconText}>✦</Text>
             </View>
-            <Text style={styles.insightTitle}>SmartGX Insight</Text>
+            <Text style={styles.insightTitle}>SmartGX Analysis</Text>
           </View>
-          <Text style={styles.insightBody}>{aiInsight}</Text>
+          <InsightDisplay
+            result={insightResult}
+            fallbackText="No transactions recorded for this month yet. Once you start spending, SmartGX will provide personalised insights here."
+          />
         </View>
 
         {/* ── Expense / Income pie toggle ── */}
@@ -1073,11 +1082,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: "700",
   },
-  insightBody: {
-    color: "#E4DCFF",
-    fontSize: typography.body,
-    lineHeight: 22,
-  },
+  /* insightBody removed — now rendered by InsightDisplay component */
 
   /* Section */
   section: { gap: spacing.md },

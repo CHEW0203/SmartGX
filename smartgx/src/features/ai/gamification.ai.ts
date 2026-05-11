@@ -1,5 +1,7 @@
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "./ai.config";
+import { polishAiOutput } from "../../lib/aiText";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 
 interface GamificationExplainInput {
   gxHealth: number;
@@ -25,11 +27,11 @@ export async function explainTreeHealth(input: GamificationExplainInput): Promis
   try {
     const res = await callSmartGxAi(
       "tree_health",
-      "In 2 short sentences, explain SmartGX Money Tree health from these stats. Plain text only.",
+      ["In 2 short sentences, explain SmartGX Money Tree health from these stats.", SMARTGX_AI_WRITING_RULES, "Plain text only."].join(" "),
       { ...input },
       cfg
     );
-    if (res?.success && res.content.trim()) return res.content.trim().slice(0, 450);
+    if (res?.success && res.content.trim()) return polishAiOutput(res.content.trim().slice(0, 450));
   } catch {
     /* ignore */
   }
@@ -61,11 +63,11 @@ export async function explainLeaderboardMove(input: {
   try {
     const res = await callSmartGxAi(
       "smartscore",
-      "Explain this user's SmartGX SmartScore / leaderboard momentum in 2 sentences. Plain text only.",
+      ["Explain this user's SmartGX SmartScore / leaderboard momentum in 2 sentences.", SMARTGX_AI_WRITING_RULES, "Plain text only."].join(" "),
       { ...input },
       cfg
     );
-    if (res?.success && res.content.trim()) return res.content.trim().slice(0, 450);
+    if (res?.success && res.content.trim()) return polishAiOutput(res.content.trim().slice(0, 450));
   } catch {
     /* ignore */
   }
@@ -92,11 +94,12 @@ export async function explainSmartScoreBlurb(input: {
         "Explain in 2–3 short sentences how this user's SmartGX score story fits their current stats.",
         "Do not contradict the numeric breakdown in context; you are explaining only, not recalculating.",
         "Plain text only.",
+        SMARTGX_AI_WRITING_RULES,
       ].join(" "),
       { ...input, staticSummary: DEFAULT_SCORE_BLURB },
       cfg
     );
-    if (res?.success && res.content.trim()) return res.content.trim().slice(0, 700);
+    if (res?.success && res.content.trim()) return polishAiOutput(res.content.trim().slice(0, 700));
   } catch {
     /* ignore */
   }
@@ -117,11 +120,11 @@ export async function explainMissionRecommendation(input: {
   try {
     const res = await callSmartGxAi(
       "mission",
-      "Give one practical SmartGX mission tip (max 2 sentences) from this progress. Plain text only.",
+      ["Give one practical SmartGX mission tip (max 2 sentences) from this progress.", SMARTGX_AI_WRITING_RULES, "Plain text only."].join(" "),
       { ...input },
       cfg
     );
-    if (res?.success && res.content.trim()) return res.content.trim().slice(0, 400);
+    if (res?.success && res.content.trim()) return polishAiOutput(res.content.trim().slice(0, 400));
   } catch {
     /* ignore */
   }

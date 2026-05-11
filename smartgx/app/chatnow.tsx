@@ -16,7 +16,11 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { ASSISTANT_QUICK_FAQ, getAssistantReplyDetailed } from "../src/services/ai/assistant.service";
+import {
+  ASSISTANT_QUICK_FAQ,
+  getAssistantReplyDetailed,
+  type AssistantReplySource,
+} from "../src/services/ai/assistant.service";
 import { testSmartGxAiConnection } from "../src/services/ai/ai.client";
 import { colors } from "../src/theme/colors";
 import { radius } from "../src/theme/radius";
@@ -27,6 +31,11 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  assistantMeta?: {
+    source: AssistantReplySource;
+    model?: string;
+    fallbackReason?: string | null;
+  };
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = [
@@ -55,8 +64,6 @@ export default function ChatNowScreen() {
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
-  /** Dev-only: last reply path (Gemini vs offline FAQ vs generic fallback). */
-  const [devAiLabel, setDevAiLabel] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const footerPadBottom = TASKBAR_ABOVE_GAP + Math.max(insets.bottom, spacing.sm);
 
@@ -104,11 +111,19 @@ export default function ChatNowScreen() {
     });
     setLoading(true);
     try {
-      const { text, source } = await runAssistant(trimmed, snapshot);
-      if (__DEV__) {
-        setDevAiLabel(source === "gemini" ? "AI: Gemini" : "AI: Fallback");
-      }
-      setMessages((prev) => [...prev, { id: `b-${Date.now()}`, role: "assistant", text }]);
+      const { text, source, model, fallbackReason } = await runAssistant(trimmed, snapshot);
+      const assistantMeta =
+        source === "gemini"
+          ? { source, model, fallbackReason: null as string | null }
+          : { source, model, fallbackReason: fallbackReason ?? null };
+      setMessages((prev) => [...prev, { id: `b-${Date.now()}`, role: "assistant", text, assistantMeta }]);
+    } catch (e) {
+      const errText = e instanceof Error ? e.message : "Something went wrong. Try again.";
+      if (__DEV__) console.error("[SmartGX Assistant] handleSend error:", e);
+      setMessages((prev) => [
+        ...prev,
+        { id: `b-${Date.now()}`, role: "assistant", text: errText, assistantMeta: { source: "fallback" as const, fallbackReason: "unhandled_error" } },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -126,11 +141,19 @@ export default function ChatNowScreen() {
       });
       setLoading(true);
       try {
-        const { text, source } = await runAssistant(trimmed, snapshot);
-        if (__DEV__) {
-          setDevAiLabel(source === "gemini" ? "AI: Gemini" : "AI: Fallback");
-        }
-        setMessages((prev) => [...prev, { id: `b-${Date.now()}`, role: "assistant", text }]);
+        const { text, source, model, fallbackReason } = await runAssistant(trimmed, snapshot);
+        const assistantMeta =
+          source === "gemini"
+            ? { source, model, fallbackReason: null as string | null }
+            : { source, model, fallbackReason: fallbackReason ?? null };
+        setMessages((prev) => [...prev, { id: `b-${Date.now()}`, role: "assistant", text, assistantMeta }]);
+      } catch (e) {
+        const errText = e instanceof Error ? e.message : "Something went wrong. Try again.";
+        if (__DEV__) console.error("[SmartGX Assistant] quickQuestion error:", e);
+        setMessages((prev) => [
+          ...prev,
+          { id: `b-${Date.now()}`, role: "assistant", text: errText, assistantMeta: { source: "fallback" as const, fallbackReason: "unhandled_error" } },
+        ]);
       } finally {
         setLoading(false);
       }
@@ -163,7 +186,6 @@ export default function ChatNowScreen() {
         <Text style={styles.heroSub}>Ask anything about SmartGX</Text>
         {__DEV__ ? (
           <View style={styles.devRow}>
-            {devAiLabel ? <Text style={styles.devPill}>{devAiLabel}</Text> : null}
             <Pressable
               style={[styles.testAiBtn, testBusy && { opacity: 0.55 }]}
               onPress={() => void runTestConnection()}
@@ -195,6 +217,15 @@ export default function ChatNowScreen() {
               <Text style={[styles.bubbleText, msg.role === "user" ? styles.userBubbleText : styles.botBubbleText]}>
                 {msg.text}
               </Text>
+              {msg.role === "assistant" && msg.assistantMeta ? (
+                <Text style={styles.sourceCaption}>
+                  {msg.assistantMeta.source === "gemini"
+                    ? `Source: Gemini${msg.assistantMeta.model ? ` · ${msg.assistantMeta.model}` : ""}`
+                    : msg.assistantMeta.source === "local_faq"
+                      ? "Source: Offline FAQ (no live AI for this reply)"
+                      : `Source: Fallback${msg.assistantMeta.fallbackReason ? ` · ${msg.assistantMeta.fallbackReason}` : ""}`}
+                </Text>
+              ) : null}
             </View>
           ))}
           {loading ? (
@@ -265,16 +296,6 @@ const styles = StyleSheet.create({
   heroTitle: { color: "#FFFFFF", fontSize: typography.title, fontWeight: "800", letterSpacing: -0.3 },
   heroSub: { color: "#C4B5FD", fontSize: typography.body, opacity: 0.85 },
   devRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 6 },
-  devPill: {
-    color: "#86EFAC",
-    fontSize: 11,
-    fontWeight: "800",
-    backgroundColor: "rgba(22,101,52,0.35)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    overflow: "hidden",
-  },
   testAiBtn: {
     backgroundColor: "rgba(167,139,250,0.25)",
     borderWidth: 1,
@@ -294,6 +315,12 @@ const styles = StyleSheet.create({
   },
 
   bubble: { maxWidth: "85%", borderRadius: 16, padding: 12 },
+  sourceCaption: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(196,181,253,0.75)",
+  },
   botBubble: {
     backgroundColor: colors.surface,
     borderWidth: 1,

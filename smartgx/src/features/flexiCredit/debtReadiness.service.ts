@@ -1,5 +1,7 @@
 import { getAiConfig } from "../ai/ai.config";
 import { callSmartGxAi } from "../../services/ai/ai.client";
+import { polishAiOutput } from "../../lib/aiText";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 
 export type ReadinessLevel = "ready" | "cautious" | "risky" | "not_recommended";
 export type BorrowPurpose =
@@ -25,6 +27,19 @@ export interface DebtReadinessContext {
   employmentType: string;
   documentsQuality: "good" | "partial" | "weak";
   purpose: BorrowPurpose;
+  /** Optional rich context for AI only -- does not change scoring math in fallback(). */
+  mainAccountBalance?: number;
+  totalSavingsPockets?: number;
+  flexiCreditOutstanding?: number;
+  flexiApprovedLimit?: number;
+  flexiAvailableCredit?: number;
+  flexiNextRepaymentDate?: string | null;
+  flexiMonthlyRepayment?: number;
+  annualProfitRate?: number;
+  projectedMonthEndMainBalance?: number;
+  estimatedNewDrawdownMonthlyRepayment?: number;
+  estimatedNewDrawdownTotalRepayment?: number;
+  tenureMonths?: number;
 }
 
 export interface DebtReadinessResult {
@@ -46,6 +61,11 @@ function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Math.round(n)));
 }
 
+function fmtRm(n: number): string {
+  const r = Math.round(n);
+  return r >= 1000 ? `RM${r.toLocaleString("en-MY")}` : `RM${r}`;
+}
+
 function fallback(context: DebtReadinessContext): DebtReadinessResult {
   const repaymentCapacity = Math.max(0, Math.round(context.monthlyIncome * 0.25 - context.existingMonthlyCommitments));
   const riskFactors: string[] = [];
@@ -54,10 +74,10 @@ function fallback(context: DebtReadinessContext): DebtReadinessResult {
 
   if (context.gxHealthScore >= 70) {
     score += 12;
-    positiveFactors.push("Strong GXHealth indicates healthier repayment behavior.");
+    positiveFactors.push(`GXHealth at ${context.gxHealthScore} suggests more room to handle repayments if income stays steady.`);
   } else if (context.gxHealthScore < 45) {
     score -= 18;
-    riskFactors.push("Low GXHealth suggests elevated debt pressure.");
+    riskFactors.push(`GXHealth at ${context.gxHealthScore} suggests cashflow is already under pressure before new borrowing.`);
   }
 
   if (context.documentsQuality === "good") positiveFactors.push("Document quality is complete and stable.");
@@ -77,13 +97,18 @@ function fallback(context: DebtReadinessContext): DebtReadinessResult {
 
   if (context.desiredDrawdown > repaymentCapacity * 6) {
     score -= 20;
-    riskFactors.push("Requested drawdown is high relative to safe repayment capacity.");
+    riskFactors.push(
+      `Requested ${fmtRm(context.desiredDrawdown)} is high versus a conservative repayment capacity near ${fmtRm(repaymentCapacity)} per month from this model.`
+    );
   } else {
-    positiveFactors.push("Requested drawdown is within manageable repayment range.");
+    positiveFactors.push("Requested drawdown is within a manageable range versus modelled repayment capacity.");
   }
 
-  if (context.emergencyBalance >= context.monthlyExpenses * 1.5) positiveFactors.push("Emergency savings buffer is available.");
-  else riskFactors.push("Emergency savings buffer is limited.");
+  if (context.emergencyBalance >= context.monthlyExpenses * 1.5) {
+    positiveFactors.push(`Emergency savings near ${fmtRm(context.emergencyBalance)} add resilience.`);
+  } else {
+    riskFactors.push(`Emergency savings near ${fmtRm(context.emergencyBalance)} are thin versus monthly spend near ${fmtRm(context.monthlyExpenses)}.`);
+  }
 
   const debtReadinessScore = clamp(score);
   const readinessLevel: ReadinessLevel =
@@ -94,17 +119,32 @@ function fallback(context: DebtReadinessContext): DebtReadinessResult {
   const recommendedActions: string[] = [];
   if (readinessLevel !== "ready") recommendedActions.push("Consider a smaller drawdown aligned to your repayment capacity.");
   if (HIGH_RISK_PURPOSE.includes(context.purpose)) recommendedActions.push("Use borrowed funds only for essential needs, not lifestyle spending.");
-  if (context.emergencyBalance < context.monthlyExpenses) recommendedActions.push("Build emergency fund further before taking larger borrowing.");
+  if (context.emergencyBalance < context.monthlyExpenses) recommendedActions.push("Build emergency savings further before taking larger borrowing.");
   if (recommendedActions.length === 0) recommendedActions.push("Maintain repayment discipline and keep auto repayment enabled.");
+
+  const main = context.mainAccountBalance;
+  const proj = context.projectedMonthEndMainBalance;
+  const mainLine =
+    typeof main === "number" && main >= 0
+      ? ` Main Account is about ${fmtRm(main)}${typeof proj === "number" ? ` and a simple month-end view lands near ${fmtRm(proj)} on Main if spend stays similar` : ""}.`
+      : "";
 
   const aiExplanation =
     readinessLevel === "ready"
-      ? "Your repayment profile is currently stable. Borrow conservatively and keep repayment automation active."
+      ? polishAiOutput(
+          `Readiness score ${debtReadinessScore} with ${readinessLevel} band. Your modelled repayment headroom is about ${fmtRm(repaymentCapacity)} per month after existing commitments.${mainLine} SmartGX still does not guarantee approval.`
+        )
       : readinessLevel === "cautious"
-        ? "Your profile supports borrowing with caution. SmartGX recommends a smaller drawdown to protect monthly cashflow."
+        ? polishAiOutput(
+            `Readiness score ${debtReadinessScore}. Borrowing may work if you keep the drawdown near ${fmtRm(recommendedDrawdown)} instead of the full ${fmtRm(context.desiredDrawdown)}.${mainLine} Watch FlexiCredit repayment dates against your income dates.`
+          )
         : readinessLevel === "risky"
-          ? "Current borrowing pressure is elevated. Reduce drawdown and prioritize essential-purpose funding only."
-          : "Borrowing is not recommended right now. Improve savings buffer and repayment capacity first.";
+          ? polishAiOutput(
+              `Readiness score ${debtReadinessScore}. New borrowing at ${fmtRm(context.desiredDrawdown)} stacks on existing pressure when GXHealth is ${context.gxHealthScore} and emergency is ${fmtRm(context.emergencyBalance)}.${mainLine} Delay or reduce the amount if you can.`
+            )
+          : polishAiOutput(
+              `Readiness score ${debtReadinessScore}. SmartGX would not treat this profile as ready for new FlexiCredit right now. Improve emergency savings and repayment headroom first.${mainLine}`
+            );
 
   return {
     debtReadinessScore,
@@ -125,11 +165,15 @@ export async function generateDebtReadinessAnalysis(context: DebtReadinessContex
   if (!config.enabled) return base;
   try {
     const res = await callSmartGxAi(
-      "debt_readiness",
+      "flexicredit_debt_readiness",
       [
-        "Explain this user's SmartGX FlexiCredit debt readiness in 2–3 short sentences.",
-        "Reference repayment capacity and purpose. Do not contradict the readiness level or numeric score.",
-        "Plain text only.",
+        "Explain this user's FlexiCredit debt readiness in 4 to 6 short sentences for a Malaysian reader.",
+        "Use RM amounts from context. Your explanation must answer: Is borrowing this amount affordable given repaymentCapacity? Is repayment pressure comfortable considering existingMonthlyCommitments and estimatedNewDrawdownMonthlyRepayment? Should the user reduce the drawdown amount or delay? How does borrowing affect Debt Risk and GXHealth?",
+        "Mention the purpose and whether it is essential or discretionary.",
+        "State clearly that SmartGX AI does not guarantee approval or pricing.",
+        "Do not contradict readinessLevel or debtReadinessScore from context.",
+        SMARTGX_AI_WRITING_RULES,
+        "Plain text only. No JSON.",
       ].join(" "),
       {
         readinessLevel: base.readinessLevel,
@@ -138,19 +182,35 @@ export async function generateDebtReadinessAnalysis(context: DebtReadinessContex
         desiredDrawdown: context.desiredDrawdown,
         monthlyIncome: context.monthlyIncome,
         monthlyExpenses: context.monthlyExpenses,
+        existingMonthlyCommitments: context.existingMonthlyCommitments,
         gxHealthScore: context.gxHealthScore,
         purpose: context.purpose,
         riskFactors: base.riskFactors,
         positiveFactors: base.positiveFactors,
+        repaymentCapacity: base.repaymentCapacity,
+        recommendedDrawdown: base.recommendedDrawdown,
+        emergencyBalance: context.emergencyBalance,
+        savingsBalance: context.savingsBalance,
+        mainAccountBalance: context.mainAccountBalance,
+        totalSavingsPockets: context.totalSavingsPockets,
+        flexiCreditOutstanding: context.flexiCreditOutstanding,
+        flexiApprovedLimit: context.flexiApprovedLimit,
+        flexiAvailableCredit: context.flexiAvailableCredit,
+        flexiNextRepaymentDate: context.flexiNextRepaymentDate,
+        flexiMonthlyRepayment: context.flexiMonthlyRepayment,
+        annualProfitRate: context.annualProfitRate,
+        projectedMonthEndMainBalance: context.projectedMonthEndMainBalance,
+        estimatedNewDrawdownMonthlyRepayment: context.estimatedNewDrawdownMonthlyRepayment,
+        estimatedNewDrawdownTotalRepayment: context.estimatedNewDrawdownTotalRepayment,
+        tenureMonths: context.tenureMonths,
       },
       config
     );
     if (res?.success && res.content.trim()) {
-      return { ...base, aiExplanation: res.content.trim().slice(0, 900) };
+      return { ...base, aiExplanation: polishAiOutput(res.content.trim().slice(0, 1200)) };
     }
   } catch {
     /* keep base */
   }
   return base;
 }
-

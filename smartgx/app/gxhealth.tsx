@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useAuth } from "../src/hooks/useAuth";
 import type { HealthFactor, HealthReport, HealthTrend } from "../src/features/health/health.types";
+import { useGxHealthFocusedGemini } from "../src/hooks/useGxHealthFocusedGemini";
 import { useHealthData } from "../src/hooks/useHealthData";
 import { colors } from "../src/theme/colors";
 import { radius } from "../src/theme/radius";
@@ -160,7 +161,22 @@ const NAV_TABS: NavTab[] = [
 
 export default function GXHealthScreen() {
   const { currentUser } = useAuth();
-  const report: HealthReport = useHealthData();
+  const health = useHealthData();
+  const { geminiSnapshot, refreshGxHealthGemini } = useGxHealthFocusedGemini({
+    userId: currentUser?.id ?? "",
+    peekGxHealthAnalysisContext: health.peekGxHealthAnalysisContext,
+  });
+
+  const { peekGxHealthAnalysisContext: _peek, ...healthRest } = health;
+  const report: HealthReport = geminiSnapshot
+    ? {
+        ...healthRest,
+        aiAnalysis: geminiSnapshot.summaryAnalysis,
+        suggestions: geminiSnapshot.recommendedActions,
+        gxHealthAiStructured: geminiSnapshot.structured,
+        gxHealthAiBody: geminiSnapshot.aiBodyMultiline,
+      }
+    : healthRest;
 
   if (!currentUser) return <Redirect href="/auth/login" />;
 
@@ -236,11 +252,16 @@ export default function GXHealthScreen() {
         <View style={styles.section}>
           <View style={styles.aiCard}>
             <View style={styles.aiCardHeader}>
-              {/* Spark / AI icon */}
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 2L14.5 9.5H22L16 14.5L18.5 22L12 17L5.5 22L8 14.5L2 9.5H9.5L12 2Z" fill="#A78BFA" />
-              </Svg>
-              <Text style={styles.aiCardLabel}>AI Analysis</Text>
+              <View style={styles.aiCardHeaderLeft}>
+                {/* Spark / AI icon */}
+                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                  <Path d="M12 2L14.5 9.5H22L16 14.5L18.5 22L12 17L5.5 22L8 14.5L2 9.5H9.5L12 2Z" fill="#A78BFA" />
+                </Svg>
+                <Text style={styles.aiCardLabel}>AI Analysis</Text>
+              </View>
+              <Pressable onPress={refreshGxHealthGemini} hitSlop={10} accessibilityRole="button" accessibilityLabel="Refresh AI analysis">
+                <Text style={styles.aiRefreshLabel}>Refresh</Text>
+              </Pressable>
             </View>
             {report.gxHealthAiStructured ? (
               <>
@@ -521,7 +542,19 @@ const styles = StyleSheet.create({
   aiCardHeader: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
+  },
+  aiCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexShrink: 1,
+  },
+  aiRefreshLabel: {
+    color: colors.textMuted,
+    fontSize: typography.caption,
+    fontWeight: "600",
   },
   aiCardLabel: {
     color: "#A78BFA",

@@ -9,6 +9,19 @@ export type NudgeActionType =
 
 export type NudgeRiskLevel = "low" | "medium" | "high" | "critical";
 
+/** Modelled month-end view after treating this payment as committed (debit reduces Main, flexi increases card used). */
+export interface NudgeMonthSpendProjection {
+  projectedMonthEndBalance: number;
+  projectedMonthEndExpense: number;
+  projectedNetCashflow: number;
+  projectedAdditionalExpense: number;
+  daysRemainingInMonth: number;
+  cashflowRisk: string;
+  debtPressure: string;
+  cashflowRiskMessage: string;
+  debtPressureNote: string;
+}
+
 export interface NudgeRiskContext {
   actionType: NudgeActionType;
   amount: number;
@@ -30,6 +43,23 @@ export interface NudgeRiskContext {
   recentTransactions: Transaction[];
   hasBudget: boolean;
   budgetAmount: number | null;
+  /** Emergency pocket balance for AI nudge context (RM). */
+  emergencyPocketBalance?: number;
+  /** FlexiCredit borrowing outstanding, not TapPay card spend (RM). */
+  flexiCreditBorrowingOutstanding?: number;
+  flexiCreditMonthlyRepayment?: number;
+  /** Top categories this month for richer AI copy. */
+  top3ExpenseCategories?: Array<{ category: string; amount: number }>;
+  bonusPocketBalance?: number;
+  goalsPocketBalance?: number;
+  /** GXHealth factor raw scores (0–100) keyed by factor id from HealthReport. */
+  gxHealthFactorScores?: Partial<
+    Record<"savings_rate" | "spending_control" | "emergency_fund" | "debt_risk" | "security", number>
+  >;
+  /** User-entered reference / note for transfers, if any. */
+  transactionDescription?: string;
+  /** Pace-based month-end projection including this payment in month-to-date spend. */
+  monthSpendProjection?: NudgeMonthSpendProjection;
 }
 
 export interface NudgeEvaluation {

@@ -28,6 +28,7 @@ import { useTransactionStore } from "../src/store/transactionStore";
 import { useNotificationStore } from "../src/store/notificationStore";
 import { useAuthStore } from "../src/store/authStore";
 import { useSavingsStore } from "../src/store/savingsStore";
+import { useFlexiCreditStore } from "../src/store/flexiCreditStore";
 import { useActivityStore } from "../src/store/activityStore";
 import { generateMockTransaction } from "../src/data/mockMerchants";
 import type { GeneratedTransaction } from "../src/data/mockMerchants";
@@ -76,6 +77,7 @@ export default function ScanScreen() {
     applyRoundUp,
     roundUpDestination,
   } = useSavingsStore();
+  const fc = useFlexiCreditStore();
   const healthReport = useHealthData();
   const roundUpPocketLabel =
     roundUpDestination === "bonus"
@@ -163,6 +165,15 @@ export default function ScanScreen() {
         savingsBuckets.bonus + savingsBuckets.emergency + savingsBuckets.goals,
       hasBudget: typeof maybeBudget === "number" && maybeBudget > 0,
       budgetAmount: maybeBudget ?? null,
+      emergencyPocketBalance: savingsBuckets.emergency,
+      flexiCreditBorrowingOutstanding: fc.outstanding,
+      flexiCreditMonthlyRepayment: fc.monthlyRepayment,
+      bonusPocketBalance: savingsBuckets.bonus,
+      goalsPocketBalance: savingsBuckets.goals,
+      gxHealthFactorScores: Object.fromEntries(healthReport.factors.map((f) => [f.key, f.score])) as Record<
+        string,
+        number
+      >,
     });
   };
 

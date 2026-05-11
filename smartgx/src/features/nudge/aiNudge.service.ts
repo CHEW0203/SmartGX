@@ -6,32 +6,150 @@ import type {
 } from "./nudge.types";
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "../ai/ai.config";
+import { polishAiOutput } from "../../lib/aiText";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 
 /** Cap wait for AI nudge copy; after this, use local fallback so Scan/Debit PIN flow stays snappy. */
 const NUDGE_AI_TIMEOUT_MS = 750;
 
+function fmtRm(n: number): string {
+  return `RM${n.toFixed(2)}`;
+}
+
 function fallbackNudge(context: NudgeRiskContext, evaluation: NudgeEvaluation): string {
-  const amount = `RM${context.amount.toFixed(2)}`;
+  const amount = fmtRm(context.amount);
   const topCat = context.topSpendingCategory || "others";
   const flexi = context.cardType === "flexicard";
+  const remaining = Math.round((context.availableBalance - context.amount) * 100) / 100;
+  const emerg =
+    typeof context.emergencyPocketBalance === "number"
+      ? ` Your Emergency pocket is about ${fmtRm(context.emergencyPocketBalance)}.`
+      : "";
+  const flexiDebt =
+    typeof context.flexiCreditBorrowingOutstanding === "number" && context.flexiCreditBorrowingOutstanding > 0
+      ? ` FlexiCredit borrowing outstanding is about ${fmtRm(context.flexiCreditBorrowingOutstanding)}.`
+      : "";
 
   if (evaluation.riskLevel === "critical") {
-    return `This ${amount} ${context.actionType.replace("_", " ")} is high pressure on your available cashflow. ${
-      flexi ? "Using Credit now means future-money repayment stress." : ""
-    } SmartGX recommends cancelling or saving this amount first.`;
+    return polishAiOutput(
+      `This ${amount} ${context.actionType.replace(/_/g, " ")} would leave about ${fmtRm(Math.max(0, remaining))} after you pay, measured against the balance SmartGX used for this check. Your GXHealth is ${context.gxHealthScore}.${emerg}${flexiDebt}${
+        flexi ? " Paying on Credit adds repayment pressure on top of normal bills." : ""
+      } Cancelling, delaying, or using Save Instead protects your buffer for essentials.`
+    );
   }
   if (flexi) {
-    return `You are about to use Credit for ${amount}. Your current GXHealth score is ${context.gxHealthScore}, and ${
-      topCat
-    } spending is already elevated this month. SmartGX recommends using Debit Card if possible.`;
+    return polishAiOutput(
+      `You are about to charge ${amount} on Credit. GXHealth is ${context.gxHealthScore} and ${topCat} is already one of your heavier categories this month.${emerg} If you can cover it from Main on Debit, that avoids adding to next month’s repayment pile.`
+    );
   }
   if (evaluation.reasonCodes.includes("amount_over_25pct_available")) {
-    return `This payment of ${amount} is more than 25% of your available balance. Continuing may reduce buffer for essentials this week.`;
+    return polishAiOutput(
+      `This ${amount} payment uses more than a quarter of the available balance SmartGX is using here, leaving about ${fmtRm(Math.max(0, remaining))}. That can shrink room for food, transport, and bills later this week.${emerg}`
+    );
   }
   if (evaluation.reasonCodes.includes("category_pressure")) {
-    return `Your ${topCat} category is already taking a high share of monthly spending. This ${amount} transaction may increase category pressure.`;
+    return polishAiOutput(
+      `${topCat} is already taking a large share of your month-to-date spend. Adding ${amount} on top may tighten the rest of the month unless you slow that category for a few days.${emerg}`
+    );
   }
-  return `Before continuing, review if this ${amount} transaction supports your current savings and cashflow goals.`;
+  return polishAiOutput(
+    `Before you confirm ${amount}, check that it matches your plan for this week. Main-style balance after this move is about ${fmtRm(Math.max(0, remaining))}.${emerg}`
+  );
+}
+
+function nudgeAiPayload(context: NudgeRiskContext, evaluation: NudgeEvaluation): Record<string, unknown> {
+  const remainingAfter = Math.round((context.availableBalance - context.amount) * 100) / 100;
+  return {
+    riskLevel: evaluation.riskLevel,
+    reasonCodes: evaluation.reasonCodes,
+    actionType: context.actionType,
+    amountRm: context.amount,
+    merchant: context.merchant,
+    category: context.category,
+    paymentMethod: context.paymentMethod,
+    gxHealthScore: context.gxHealthScore,
+    cardType: context.cardType,
+    topSpendingCategory: context.topSpendingCategory,
+    availableBalance: context.availableBalance,
+    currentMainBalance: context.currentBalance,
+    monthlyIncome: context.monthlyIncome,
+    monthlyExpense: context.monthlyExpense,
+    top3ExpenseCategories: context.top3ExpenseCategories,
+    emergencyPocketBalance: context.emergencyPocketBalance,
+    flexiCreditBorrowingOutstanding: context.flexiCreditBorrowingOutstanding,
+    flexiCreditMonthlyRepayment: context.flexiCreditMonthlyRepayment,
+    totalSavingsPockets: context.savingsBalance,
+    remainingAfterPayment: remainingAfter,
+    recommendSaveInstead: evaluation.recommendSaveInstead,
+    recommendUseDebitInstead: evaluation.recommendUseDebitInstead,
+    categorySpendThisMonth: context.categorySpending,
+    flexiCardLimit: context.flexiCardLimit,
+    flexiCardUsed: context.flexiCardUsed,
+    bonusPocketBalance: context.bonusPocketBalance,
+    goalsPocketBalance: context.goalsPocketBalance,
+    gxHealthFactorScores: context.gxHealthFactorScores,
+    transactionDescription: context.transactionDescription ?? null,
+    monthSpendProjection: context.monthSpendProjection ?? null,
+  };
+}
+
+function transactionDescriptor(context: NudgeRiskContext): string {
+  const cat = context.category ?? "this payment";
+  const mer = (context.merchant ?? "").trim();
+  const desc = (context.transactionDescription ?? "").trim();
+  if (mer && desc) return `${cat} (${mer}). Reference: ${desc}`;
+  if (mer) return `${cat} (${mer})`;
+  if (desc) return `${cat}. Reference: ${desc}`;
+  return String(cat);
+}
+
+function buildCriticalRiskGeminiContext(
+  reason: string,
+  context: NudgeRiskContext,
+  evaluation: NudgeEvaluation,
+  safetyAlignment: Pick<ReasonAnalysisResult, "recommendation" | "fraudRisk" | "canContinue">
+): Record<string, unknown> {
+  const remainingAfter = Math.round((context.availableBalance - context.amount) * 100) / 100;
+  return {
+    ...nudgeAiPayload(context, evaluation),
+    riskLevel: evaluation.riskLevel,
+    userReason: reason.slice(0, 2000),
+    transaction: {
+      amountRm: context.amount,
+      actionType: context.actionType,
+      paymentMethod: context.paymentMethod,
+      category: context.category ?? "others",
+      merchant: context.merchant ?? null,
+      descriptor: transactionDescriptor(context),
+    },
+    balances: {
+      mainAccountBefore: context.currentBalance,
+      availableForThisCheck: context.availableBalance,
+      projectedAfterPayment: remainingAfter,
+      bonusPocket: context.bonusPocketBalance,
+      emergencyPocket: context.emergencyPocketBalance,
+      goalsPocket: context.goalsPocketBalance,
+      totalSavingsPockets: context.savingsBalance,
+    },
+    monthCashflow: {
+      monthlyIncome: context.monthlyIncome,
+      monthlyExpenses: context.monthlyExpense,
+    },
+    gxHealthScore: context.gxHealthScore,
+    gxHealthFactorScores: context.gxHealthFactorScores ?? null,
+    flexiCreditOutstanding: context.flexiCreditBorrowingOutstanding ?? null,
+    flexiMonthlyRepayment: context.flexiCreditMonthlyRepayment ?? null,
+    recentTransactionsSample: (context.recentTransactions ?? []).slice(0, 6).map((t) => ({
+      amount: t.amount,
+      category: t.category,
+      merchant: t.merchant,
+      type: t.type,
+      note: t.note ?? null,
+    })),
+    monthSpendProjection: context.monthSpendProjection ?? null,
+    transactionDescription: context.transactionDescription ?? null,
+    safetyAlignment,
+  };
 }
 
 export async function generateAiNudge(context: NudgeRiskContext, evaluation: NudgeEvaluation): Promise<string> {
@@ -39,27 +157,20 @@ export async function generateAiNudge(context: NudgeRiskContext, evaluation: Nud
   if (!config.enabled) return fallbackNudge(context, evaluation);
 
   try {
-    const payload = {
-      riskLevel: evaluation.riskLevel,
-      reasonCodes: evaluation.reasonCodes,
-      actionType: context.actionType,
-      amount: context.amount,
-      merchant: context.merchant,
-      category: context.category,
-      gxHealthScore: context.gxHealthScore,
-      cardType: context.cardType,
-      topSpendingCategory: context.topSpendingCategory,
-      availableBalance: context.availableBalance,
-    };
+    const payload = nudgeAiPayload(context, evaluation);
     const prompt = [
-      "Write one concise SmartGX payment nudge (max 3 short sentences).",
-      "Be specific to amount, payment method, and risk level. Plain text only.",
+      evaluation.riskLevel === "critical"
+        ? "Write a stronger SmartGX critical-risk nudge (max 4 short sentences). Name the most serious cashflow or debt issue using the numbers in context."
+        : "Write a SmartGX high-risk payment nudge (max 4 short sentences). Explain why continuing may hurt Main balance, Emergency, or repayments using context.",
+      "Mention RM amounts from context. Suggest Save Instead or Debit when recommendSaveInstead or recommendUseDebitInstead is true.",
+      SMARTGX_AI_WRITING_RULES,
+      "Plain text only. No JSON.",
     ].join(" ");
 
-    const aiPromise = callSmartGxAi("nudge", prompt, payload, config);
+    const aiPromise = callSmartGxAi("smart_ai_nudge", prompt, payload, config);
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), NUDGE_AI_TIMEOUT_MS));
     const res = await Promise.race([aiPromise, timeoutPromise]);
-    if (res?.success && res.content.trim()) return res.content.trim().slice(0, 900);
+    if (res?.success && res.content.trim()) return polishAiOutput(res.content.trim().slice(0, 900));
   } catch {
     /* fallback */
   }
@@ -128,24 +239,45 @@ export async function generateRemoteReasonAnalysis(
       : 20;
 
     const local = localAnalyzeCriticalReason(reason, context, evaluation);
+    const geminiContext = buildCriticalRiskGeminiContext(reason, context, evaluation, {
+      recommendation: local.recommendation,
+      fraudRisk: local.fraudRisk,
+      canContinue: local.canContinue,
+    });
 
     const res = await callSmartGxAi(
-      "critical_reason",
+      "critical_risk_nudge",
       [
-        "Analyze the user's stated reason for a high-risk SmartGX transaction.",
+        "You are SmartGX Critical Risk analysis. Use ONLY context.transaction, context.balances, context.userReason, context.monthCashflow, context.monthSpendProjection, context.transactionDescription, context.gxHealthFactorScores, and context.recentTransactionsSample.",
         "Return JSON only with keys: necessity, urgency, impulseRisk, fraudRisk, cashflowConcern (each low|medium|high),",
         "recommendation (allow|delay|block|use_debit|save_instead|reduce_amount), explanation (string), saferAlternative (string), canContinue (boolean).",
-        "Be conservative on fraud; align with SmartGX safety.",
+        "",
+        "NECESSITY EVALUATION (this is the most important dimension):",
+        "Read context.userReason carefully and classify what kind of expense it is.",
+        "Accommodation (rent, hostel, deposit), tuition/school/semester fees, medical/hospital, utilities, groceries, insurance, loan repayment, and family support are HIGH necessity.",
+        "Food and dining out, transport, and moderate personal care are MEDIUM necessity.",
+        "Shopping, gadgets, gaming, entertainment, luxury, gifts, and wants are LOW necessity.",
+        "If unsure, lean toward MEDIUM and say why in the explanation.",
+        "Do NOT default necessity to Medium for clearly essential expenses like hostel fees, rent, tuition, or medical.",
+        "",
+        "The explanation must:",
+        "1. Name the user's reason (e.g. hostel fee, rent, tuition) and evaluate whether it is essential, time-sensitive, or discretionary.",
+        "2. State the RM amount and projected remaining balance after payment.",
+        "3. Mention Emergency buffer adequacy.",
+        "4. Explain why the recommendation was chosen for THIS specific reason.",
+        "5. If the expense is necessary but cashflow is tight, recommend continuing with caution rather than Save Instead.",
+        "6. Only recommend Save Instead strongly for non-essential or impulse spending.",
+        "",
+        "Never mention laptops, phones, or gadgets unless userReason or transaction.category clearly indicates them.",
+        "Tie risk to Emergency balance, Main after payment, month cashflow, FlexiCredit pressure, or GXHealth when those numbers exist. If data is missing, say what is missing in one short phrase then continue with available facts.",
+        "Be conservative on fraud. Do not contradict context.safetyAlignment.recommendation with a weaker safety stance.",
+        SMARTGX_AI_WRITING_RULES,
       ].join(" "),
       {
-        reason: reason.slice(0, 2000),
         riskScore,
         riskLevel: evaluation.riskLevel,
-        actionType: context.actionType,
-        amount: context.amount,
-        gxHealthScore: context.gxHealthScore,
         remainingBalance,
-        localAnalysis: local,
+        ...geminiContext,
       },
       config
     );
@@ -154,8 +286,7 @@ export async function generateRemoteReasonAnalysis(
 
     const parsed =
       Object.keys(res.structured).length > 0 ? tryParseReasonAnalysisJson(JSON.stringify(res.structured)) : null;
-    const fromText = parsed ?? tryParseReasonAnalysisJson(res.content);
-    return fromText;
+    return parsed ?? tryParseReasonAnalysisJson(res.content);
   } catch {
     return null;
   }
@@ -163,17 +294,34 @@ export async function generateRemoteReasonAnalysis(
 
 const STRONG_REASONS = [
   "rent",
+  "hostel",
+  "accommodation",
+  "housing",
+  "deposit",
   "tuition",
   "school fee",
+  "college fee",
+  "university fee",
+  "semester fee",
   "medical",
   "hospital",
+  "clinic",
+  "pharmacy",
   "emergency",
   "bill",
   "utilities",
+  "electric",
+  "water bill",
+  "internet bill",
+  "phone bill",
+  "insurance",
   "loan repayment",
   "own account",
   "transfer to my bank",
   "family support",
+  "groceries",
+  "food supply",
+  "childcare",
 ];
 
 const WEAK_IMPULSE = [
@@ -278,6 +426,10 @@ export function localAnalyzeCriticalReason(
 
   if (strongHit && impulseScore <= 1) {
     const severeCashflow = cashScore >= 3;
+    const afterBal = fmtRm(Math.max(0, context.availableBalance - context.amount));
+    const emergNote = typeof context.emergencyPocketBalance === "number"
+      ? ` Your Emergency pocket is ${fmtRm(context.emergencyPocketBalance)}.`
+      : "";
     return {
       necessity: "high",
       urgency,
@@ -286,10 +438,9 @@ export function localAnalyzeCriticalReason(
       cashflowConcern,
       recommendation: severeCashflow ? "reduce_amount" : "allow",
       canContinue: true,
-      explanation:
-        severeCashflow
-          ? "This appears to be a necessary payment. SmartGX allows you to continue, but the current amount puts high pressure on your cashflow. Please confirm carefully or reduce the amount."
-          : "This appears to be a necessary payment. SmartGX allows you to continue after confirmation.",
+      explanation: severeCashflow
+        ? `Your reason ("${reason.trim().slice(0, 80)}") points to a necessary expense. Paying ${fmtRm(context.amount)} would leave about ${afterBal}.${emergNote} SmartGX allows you to continue, but this puts high pressure on your cashflow. Confirm carefully or consider a partial payment.`
+        : `Your reason ("${reason.trim().slice(0, 80)}") points to a necessary expense. SmartGX allows you to continue after confirmation.`,
       saferAlternative: severeCashflow
         ? "Try a smaller amount first and complete the remaining payment later."
         : "Proceed with confirmation and passcode verification.",
@@ -297,6 +448,10 @@ export function localAnalyzeCriticalReason(
   }
 
   if (strongHit && cashScore >= 3) {
+    const afterBal = fmtRm(Math.max(0, context.availableBalance - context.amount));
+    const emergNote = typeof context.emergencyPocketBalance === "number"
+      ? ` Emergency pocket is ${fmtRm(context.emergencyPocketBalance)}.`
+      : "";
     return {
       necessity: "high",
       urgency,
@@ -305,14 +460,14 @@ export function localAnalyzeCriticalReason(
       cashflowConcern: "high",
       recommendation: "delay",
       canContinue: false,
-      explanation:
-        "Although this looks like necessary spending, the amount still puts severe pressure on your remaining balance. Consider delaying part of the payment or a smaller amount.",
+      explanation: `Your reason ("${reason.trim().slice(0, 80)}") looks like necessary spending, but paying ${fmtRm(context.amount)} leaves about ${afterBal} available.${emergNote} Consider delaying part of the payment or reducing the amount if the due date is not immediate.`,
       saferAlternative: "Try a smaller amount or split this payment.",
     };
   }
 
   if (weakHit || impulseScore >= 2) {
     if (flexiWithDebitOption && impulseScore >= 2) {
+      const tx = transactionDescriptor(context);
       return {
         necessity,
         urgency,
@@ -321,13 +476,16 @@ export function localAnalyzeCriticalReason(
         cashflowConcern,
         recommendation: "use_debit",
         canContinue: false,
-        explanation:
-          "This looks like discretionary spending. You have enough debit balance—SmartGX recommends using Debit instead of Credit, or delaying until you have saved for it.",
+        explanation: `This payment pattern looks like flexible spend for ${tx} at ${fmtRm(
+          context.amount
+        )}. You have enough debit balance, so SmartGX recommends Debit instead of Credit, or delaying until you have saved for it.`,
         saferAlternative: "Use Debit Instead or Save Instead.",
       };
     }
 
     const highCash = cashflowConcern === "high" || cashScore >= 3;
+    const tx = transactionDescriptor(context);
+    const after = fmtRm(Math.max(0, context.availableBalance - context.amount));
     return {
       necessity,
       urgency,
@@ -336,12 +494,13 @@ export function localAnalyzeCriticalReason(
       cashflowConcern,
       recommendation: highCash ? "save_instead" : "delay",
       canContinue: false,
-      explanation:
-        "Buying a laptop or similar item may be useful, but your reason does not show urgent necessity. Since this transaction creates high pressure on your available cashflow, SmartGX recommends delaying the purchase or saving first.",
+      explanation: `Your note points to flexible spending around ${tx} for ${fmtRm(context.amount)}. After this move, the balance SmartGX is using for this check would be about ${after}. That is tight for essentials unless you delay, reduce the amount, or use Save Instead.`,
       saferAlternative: highCash ? "Save Instead or try a smaller amount." : "Delay and review GXHealth.",
     };
   }
 
+  const txd = transactionDescriptor(context);
+  const afterBal = fmtRm(Math.max(0, context.availableBalance - context.amount));
   return {
     necessity,
     urgency,
@@ -350,9 +509,16 @@ export function localAnalyzeCriticalReason(
     cashflowConcern,
     recommendation: cashScore >= 3 ? "save_instead" : "delay",
     canContinue: false,
-    explanation:
-      "SmartGX could not confirm strong necessity from your reason. Review GXHealth, try a smaller amount, or save toward this goal first.",
+    explanation: `Your reason ("${reason.trim().slice(0, 60)}") did not match an urgent bill pattern for this ${txd} of ${fmtRm(context.amount)}. After paying, available balance is about ${afterBal}. Consider verifying urgency, trying a smaller amount, or Save Instead if cashflow is tight.`,
     saferAlternative: cashScore >= 3 ? "Save Instead." : "Try a smaller amount.",
+  };
+}
+
+function polishReasonResult(r: ReasonAnalysisResult): ReasonAnalysisResult {
+  return {
+    ...r,
+    explanation: polishAiOutput(r.explanation),
+    saferAlternative: polishAiOutput(r.saferAlternative),
   };
 }
 
@@ -367,6 +533,6 @@ export async function analyzeCriticalReasonWithContext(
   } catch {
     remote = null;
   }
-  if (remote) return remote;
-  return localAnalyzeCriticalReason(reason, context, evaluation);
+  if (remote) return polishReasonResult(remote);
+  return polishReasonResult(localAnalyzeCriticalReason(reason, context, evaluation));
 }

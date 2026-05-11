@@ -2,7 +2,7 @@
  * Shared GXHealth calculation hook.
  * Both dashboard and GXHealth screen import this to guarantee identical scores.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./useAuth";
 import { useTransactionStore } from "../store/transactionStore";
 import { useSavingsStore } from "../store/savingsStore";
@@ -25,14 +25,19 @@ import {
 import type { HealthReport } from "../features/health/health.types";
 import { normalizeScore, safeNumber } from "../lib/number";
 import { DEFAULT_MONTHLY_INCOME } from "../lib/financialDefaults";
-import { enrichGxHealthWithAi, gxHealthAnalysisFallback } from "../features/ai/gxhealth.ai";
+import { gxHealthAnalysisFallback, type GXHealthAnalysisContext } from "../features/ai/gxhealth.ai";
 import { buildGxHealthAiContext } from "../features/ai/gxhealthContext.builder";
 import { transactionOccurredMs, visibleHistoryTransactions } from "../lib/transactionTime";
 import type { GXHealthStructuredAnalysis } from "../features/ai/gxhealth.ai.types";
 
 export { DEFAULT_MONTHLY_INCOME } from "../lib/financialDefaults";
 
-export function useHealthData(): HealthReport {
+/** Same as HealthReport plus a stable peek for the GXHealth screen Gemini call (one per focus). */
+export type UseHealthDataResult = HealthReport & {
+  peekGxHealthAnalysisContext: () => GXHealthAnalysisContext;
+};
+
+export function useHealthData(): UseHealthDataResult {
   const { currentUser } = useAuth();
   const { transactions } = useTransactionStore();
   const latestAutoAllocation = useSavingsStore((s) => s.latestAutoAllocation);
@@ -399,47 +404,23 @@ export function useHealthData(): HealthReport {
     setGxHealthAiBody(ruleAi.aiBodyMultiline);
   }, [ruleAi]);
 
-  const prevScoreRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const prev = prevScoreRef.current;
-    const extended = {
-      ...extendedBase,
-      gxHealth: {
-        ...extendedBase.gxHealth,
-        previousScore: prev != null ? Math.round(prev) : null,
-        scoreChange: prev != null ? Math.round(reportNorm.score - prev) : null,
-      },
-    };
-
-    void enrichGxHealthWithAi({
-      score: baseReport.score,
-      displayScore: reportNorm.score,
-      status: baseReport.status,
-      factors: baseReport.factors,
-      input,
-      extended,
-    }).then((enriched) => {
-      if (cancelled || !enriched) return;
-      setAiAnalysis(enriched.summaryAnalysis);
-      setSuggestions(enriched.recommendedActions);
-      setGxHealthAiStructured(enriched.structured);
-      setGxHealthAiBody(enriched.aiBodyMultiline);
-    });
-
-    prevScoreRef.current = reportNorm.score;
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    baseReport.score,
-    baseReport.status,
-    baseReport.factors,
-    reportNorm.score,
+  const geminiCtxRef = useRef<GXHealthAnalysisContext | null>(null);
+  geminiCtxRef.current = {
+    score: baseReport.score,
+    displayScore: reportNorm.score,
+    status: baseReport.status,
+    factors: baseReport.factors,
     input,
-    extendedBase,
-  ]);
+    extended: extendedBase,
+  };
+
+  const peekGxHealthAnalysisContext = useCallback((): GXHealthAnalysisContext => {
+    const g = geminiCtxRef.current;
+    if (!g) {
+      throw new Error("peekGxHealthAnalysisContext called before context was ready");
+    }
+    return g;
+  }, []);
 
   return {
     ...reportNorm,
@@ -447,5 +428,6 @@ export function useHealthData(): HealthReport {
     suggestions,
     gxHealthAiStructured,
     gxHealthAiBody,
+    peekGxHealthAnalysisContext,
   };
 }

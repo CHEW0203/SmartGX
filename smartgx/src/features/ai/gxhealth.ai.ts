@@ -1,12 +1,14 @@
 import type { HealthFactor, HealthInput, HealthStatus } from "../health/health.types";
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "../../services/ai/ai.config";
-import { sanitizeAiCurrencyToRM } from "../../lib/aiText";
+import { polishAiOutput } from "../../lib/aiText";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 import { userHasPinSet } from "../../store/securityStore";
 import type { GxHealthAiContextPayload } from "./gxhealthContext.builder";
 import type {
   GXHealthActionType,
   GXHealthRecommendedAction,
+  GXHealthRelatedFactor,
   GXHealthStructuredAnalysis,
 } from "./gxhealth.ai.types";
 
@@ -19,6 +21,12 @@ export interface GXHealthAnalysisContext {
   factors: HealthFactor[];
   input: HealthInput;
   extended: GxHealthAiContextPayload;
+}
+
+/** Optional dev logging for GXHealth screen (one request per focus). */
+export interface GxHealthAiRequestMeta {
+  reason: "screen_focus" | "manual_refresh";
+  requestKey: string;
 }
 
 export interface GXHealthAnalysisResult {
@@ -49,6 +57,19 @@ function parseActionType(v: unknown): GXHealthActionType {
     : "cashflow";
 }
 
+const RELATED_FACTOR_SET = new Set<GXHealthRelatedFactor>([
+  "Savings",
+  "Spending",
+  "Emergency",
+  "Debt Risk",
+  "Security",
+]);
+
+function parseRelatedFactor(v: unknown): GXHealthRelatedFactor | undefined {
+  if (typeof v !== "string") return undefined;
+  return RELATED_FACTOR_SET.has(v as GXHealthRelatedFactor) ? (v as GXHealthRelatedFactor) : undefined;
+}
+
 function clampMoveToMain(main: number, want: number, minBuffer = 50): number {
   const cap = Math.max(0, main - minBuffer);
   return Math.min(Math.max(0, want), cap);
@@ -74,12 +95,15 @@ export function buildGXHealthPrompt(_context: GxHealthAiContextPayload): string 
     "Do not recommend saving more than Main Account can afford after a RM50 buffer.",
     "Do not recommend repaying more than flexiCreditOutstanding.",
     "Do not suggest borrowing to fix overspending.",
+    SMARTGX_AI_WRITING_RULES,
     "Output ONE JSON object only (no markdown code fences). Keys:",
     '"summary" (string, 2–3 sentences),',
     '"scoreExplanation" (string, 2–4 sentences tying score to savings, spend categories, cashflow, credit),',
     '"positiveSignals" (array of 2–4 short strings),',
     '"riskSignals" (array of 2–4 short strings),',
-    '"recommendedActions" (array of 3–5 objects: title, reason, impact, actionType),',
+    '"recommendedActions" (array of 3–6 objects: title, reason, impact, actionType, optional relatedFactor, optional suggestedAction),',
+    'relatedFactor must be one of: "Savings"|"Spending"|"Emergency"|"Debt Risk"|"Security" when present.',
+    "Include several different pillars when context.healthFactors show multiple weak areas. Do not output security-only actions unless Security is clearly the weakest pillar.",
     'actionType must be one of: "saving"|"spending"|"credit"|"security"|"cashflow"|"repayment",',
     '"priorityAction" (one concrete sentence),',
     '"confidence" ("low"|"medium"|"high").',
@@ -110,11 +134,14 @@ function tryParseGxHealthStructured(
       const title = typeof o.title === "string" ? o.title.trim() : "";
       const reason = typeof o.reason === "string" ? o.reason.trim() : "";
       if (!title) continue;
+      const suggestedAction = typeof o.suggestedAction === "string" ? o.suggestedAction.trim() : "";
       recommendedActions.push({
-        title,
-        reason: reason || title,
-        impact: typeof o.impact === "string" ? o.impact.trim() : "",
+        title: polishAiOutput(title),
+        reason: polishAiOutput(reason || title),
+        impact: polishAiOutput(typeof o.impact === "string" ? o.impact.trim() : ""),
         actionType: parseActionType(o.actionType),
+        relatedFactor: parseRelatedFactor(o.relatedFactor),
+        suggestedAction: suggestedAction ? polishAiOutput(suggestedAction) : undefined,
       });
     }
 
@@ -124,17 +151,18 @@ function tryParseGxHealthStructured(
       confRaw === "low" || confRaw === "medium" || confRaw === "high" ? confRaw : "medium";
 
     return {
-      summary: sanitizeAiCurrencyToRM(summary),
-      scoreExplanation: sanitizeAiCurrencyToRM(scoreExplanation),
-      positiveSignals: positiveSignals.map(sanitizeAiCurrencyToRM),
-      riskSignals: riskSignals.map(sanitizeAiCurrencyToRM),
+      summary: polishAiOutput(summary),
+      scoreExplanation: polishAiOutput(scoreExplanation),
+      positiveSignals: positiveSignals.map(polishAiOutput),
+      riskSignals: riskSignals.map(polishAiOutput),
       recommendedActions: recommendedActions.map((a) => ({
         ...a,
-        title: sanitizeAiCurrencyToRM(a.title),
-        reason: sanitizeAiCurrencyToRM(a.reason),
-        impact: sanitizeAiCurrencyToRM(a.impact),
+        title: polishAiOutput(a.title),
+        reason: polishAiOutput(a.reason),
+        impact: polishAiOutput(a.impact),
+        suggestedAction: a.suggestedAction ? polishAiOutput(a.suggestedAction) : undefined,
       })),
-      priorityAction: sanitizeAiCurrencyToRM(priorityAction),
+      priorityAction: polishAiOutput(priorityAction),
       confidence,
     };
   };
@@ -162,6 +190,13 @@ function isPinSetupRecommendationText(text: string): boolean {
   );
 }
 
+function actionLine(a: GXHealthRecommendedAction): string {
+  const core = a.reason && a.reason !== a.title ? `${a.title} — ${a.reason}` : a.title;
+  const sug = a.suggestedAction?.trim();
+  if (sug) return `${core} ${sug}`;
+  return core;
+}
+
 function stripPinSetupRecommendationsIfConfigured(
   result: GXHealthAnalysisResult,
   pinConfigured: boolean
@@ -179,9 +214,7 @@ function stripPinSetupRecommendationsIfConfigured(
 
   const fromStructured =
     structured && structured.recommendedActions.length > 0
-      ? structured.recommendedActions.map((a) =>
-          a.reason && a.reason !== a.title ? `${a.title} — ${a.reason}` : a.title
-        )
+      ? structured.recommendedActions.map((a) => actionLine(a))
       : null;
 
   const recommendedActions = (fromStructured ?? result.recommendedActions).filter(
@@ -201,9 +234,7 @@ function structuredToFallbackStrings(
   s: GXHealthStructuredAnalysis,
   tone: GXHealthAnalysisResult["tone"]
 ): GXHealthAnalysisResult {
-  const recommendedActions = s.recommendedActions.map((a) =>
-    a.reason && a.reason !== a.title ? `${a.title} — ${a.reason}` : a.title
-  );
+  const recommendedActions = s.recommendedActions.map((a) => actionLine(a));
   return {
     summaryAnalysis: s.summary,
     aiBodyMultiline: [s.summary, "", s.scoreExplanation].join("\n"),
@@ -307,6 +338,11 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
     riskSignals.push(`Watch ${topFactorLabel.toLowerCase()} — it currently drags the score the most.`);
   }
 
+  const spendFac = factors.find((f) => f.key === "spending_control");
+  const savFac = factors.find((f) => f.key === "savings_rate");
+  const debtFac = factors.find((f) => f.key === "debt_risk");
+  const secFac = factors.find((f) => f.key === "security");
+
   const recs: GXHealthRecommendedAction[] = [];
   const capEmergency = clampMoveToMain(main, 100);
   if (extended.account.emergency < extended.monthlyOverview.totalExpensesThisMonth && capEmergency >= 20) {
@@ -315,54 +351,32 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
       reason: "Rebuild buffer so essentials are covered if spend stays high.",
       impact: "Raises emergency cover without emptying Main.",
       actionType: "saving",
+      relatedFactor: "Emergency",
     });
   }
 
-  if (topCat && (topCat.name.toLowerCase().includes("food") || topCat.name.toLowerCase().includes("shopping"))) {
+  if (topCat && spendFac && spendFac.score < 72) {
     const weekCap = Math.max(50, Math.round(topCat.amount / 4));
     recs.push({
       title: `Keep ${topCat.name} under ${formatRm(weekCap)} for the next 7 days`,
       reason: `${topCat.name} is your top category at ${formatRm(topCat.amount)}.`,
       impact: "Slows category pressure while income catches up.",
       actionType: "spending",
+      relatedFactor: "Spending",
     });
   }
 
-  if (debtUsed > 0 && displayScore < 75) {
+  if (debtUsed > 0 && (debtFac?.score ?? 99) < 72 && displayScore < 78) {
     recs.push({
-      title: "Pause non-essential Credit/TapPay until GXHealth is back above 75",
+      title: "Pause non-essential Credit/TapPay until GXHealth is back on track",
       reason: "New credit spend stacks on existing exposure and repayment dates.",
       impact: "Reduces rollover risk and keeps repayments predictable.",
       actionType: "credit",
+      relatedFactor: "Debt Risk",
     });
   }
 
   const maxRepay = extended.credit.flexiCreditOutstanding;
-  if (!secCtx.pinConfigured) {
-    recs.push({
-      title: "Set up your 6-digit PIN before using high-risk money movement",
-      reason: "PIN protects transfers, FlexiCredit, and sensitive actions.",
-      impact: "Raises Security Score and GXHealth Security factor.",
-      actionType: "security",
-    });
-  }
-  if (secCtx.deviceSafetyStatus !== "safe") {
-    recs.push({
-      title: "Complete Device Safety Check in Security Center",
-      reason: `Status is ${secCtx.deviceSafetyStatus} — unfinished checks pull down Security Score.`,
-      impact: "Improves Security factor and overall GXHealth.",
-      actionType: "security",
-    });
-  }
-  if (secCtx.securityScore < 65 && secCtx.scamProtectionSummary.toLowerCase().includes("high")) {
-    recs.push({
-      title: "Review Scam Protection — recent checks flagged higher risk",
-      reason: secCtx.scamProtectionSummary,
-      impact: "Reduces security drag on GXHealth.",
-      actionType: "security",
-    });
-  }
-
   if (maxRepay > 0 && main > 80) {
     const repay = clampMoveToMain(main, Math.min(maxRepay, Math.round(maxRepay * 0.15)), 40);
     if (repay >= 20) {
@@ -371,8 +385,64 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
         reason: `Outstanding is about ${formatRm(maxRepay)}; partial pay-down protects cashflow.`,
         impact: "Lowers interest drag and debt ratio in GXHealth.",
         actionType: "repayment",
+        relatedFactor: "Debt Risk",
       });
     }
+  }
+
+  if (savFac && savFac.score < 62) {
+    recs.push({
+      title: `Improve ${savFac.label}`,
+      reason: savFac.behaviorExplanation.slice(0, 220),
+      impact: "Supports Bonus and Goals discipline separate from Emergency buffer.",
+      actionType: "saving",
+      relatedFactor: "Savings",
+    });
+  } else if (!extended.savingsBehaviour.roundUpEnabled && (savFac?.score ?? 99) < 70) {
+    recs.push({
+      title: "Enable Round-up Saving from Saving & Automation",
+      reason: "Small round-ups add steady Bonus or Goals flow without large Main moves.",
+      impact: "Builds the Savings factor score over time.",
+      actionType: "saving",
+      relatedFactor: "Savings",
+    });
+  }
+
+  const securityRecs: GXHealthRecommendedAction[] = [];
+  if (!secCtx.pinConfigured) {
+    securityRecs.push({
+      title: "Set up your 6-digit PIN before using high-risk money movement",
+      reason: "PIN protects transfers, FlexiCredit, and sensitive actions.",
+      impact: "Raises Security Score and GXHealth Security factor.",
+      actionType: "security",
+      relatedFactor: "Security",
+    });
+  }
+  if (secCtx.deviceSafetyStatus !== "safe") {
+    securityRecs.push({
+      title: "Complete Device Safety Check in Security Center",
+      reason: `Status is ${secCtx.deviceSafetyStatus} — unfinished checks pull down Security Score.`,
+      impact: "Improves Security factor and overall GXHealth.",
+      actionType: "security",
+      relatedFactor: "Security",
+    });
+  }
+  if (secCtx.securityScore < 65 && secCtx.scamProtectionSummary.toLowerCase().includes("high")) {
+    securityRecs.push({
+      title: "Review Scam Protection — recent checks flagged higher risk",
+      reason: secCtx.scamProtectionSummary,
+      impact: "Reduces security drag on GXHealth.",
+      actionType: "security",
+      relatedFactor: "Security",
+    });
+  }
+
+  const nonSec = recs.filter((r) => r.actionType !== "security").length;
+  const secWeak = (secFac?.score ?? 100) < 62;
+  if (secWeak || nonSec >= 2) {
+    recs.push(...securityRecs.slice(0, 2));
+  } else if (securityRecs.length > 0) {
+    recs.push(securityRecs[0]);
   }
 
   if (recs.length === 0) {
@@ -381,6 +451,7 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
       reason: `Safe spend budget from your rule is ${formatRm(extended.spending.safeBudget)}.`,
       impact: "Keeps GXHealth factors aligned with your income profile.",
       actionType: "cashflow",
+      relatedFactor: "Spending",
     });
   }
 
@@ -388,41 +459,116 @@ export function gxHealthAnalysisFallback(context: GXHealthAnalysisContext): GXHe
   const scoreExplanation = `This score is mainly shaped by ${weakest?.label ?? "behaviour"} (${weakest?.statusLabel ?? "watch"}) versus ${strongest?.label ?? "other areas"}. Month-to-date spend is ${formatRm(extended.monthlyOverview.totalExpensesThisMonth)} against income ${formatRm(extended.monthlyOverview.totalIncomeThisMonth)}, so net cashflow is ${formatRm(cashflow)} with ${extended.monthlyOverview.daysRemainingInMonth} days left in the month.`;
 
   const structured: GXHealthStructuredAnalysis = {
-    summary: sanitizeAiCurrencyToRM(summary),
-    scoreExplanation: sanitizeAiCurrencyToRM(scoreExplanation),
-    positiveSignals: positiveSignals.map(sanitizeAiCurrencyToRM),
-    riskSignals: riskSignals.map(sanitizeAiCurrencyToRM),
+    summary: polishAiOutput(summary),
+    scoreExplanation: polishAiOutput(scoreExplanation),
+    positiveSignals: positiveSignals.map(polishAiOutput),
+    riskSignals: riskSignals.map(polishAiOutput),
     recommendedActions: recs.map((a) => ({
       ...a,
-      title: sanitizeAiCurrencyToRM(a.title),
-      reason: sanitizeAiCurrencyToRM(a.reason),
-      impact: sanitizeAiCurrencyToRM(a.impact),
+      title: polishAiOutput(a.title),
+      reason: polishAiOutput(a.reason),
+      impact: polishAiOutput(a.impact),
     })),
-    priorityAction: sanitizeAiCurrencyToRM(recs[0]?.title ?? "Review top spending category and protect Main Account buffer this week."),
+    priorityAction: polishAiOutput(recs[0]?.title ?? "Review top spending category and protect Main Account buffer this week."),
     confidence: "medium",
   };
 
   return stripPinSetupRecommendationsIfConfigured(structuredToFallbackStrings(structured, tone), secCtx.pinConfigured);
 }
 
+/** If Gemini returns only security actions, blend in rule-based non-security actions from local fallback. */
+function diversifyAiGxRecommendations(
+  ai: GXHealthRecommendedAction[],
+  base: GXHealthAnalysisResult,
+  pinOk: boolean
+): GXHealthRecommendedAction[] {
+  const pinF = (a: GXHealthRecommendedAction) =>
+    !(pinOk && a.actionType === "security" && isPinSetupRecommendationText(`${a.title} ${a.reason}`));
+  const list = ai.filter(pinF);
+  const nonSecurity = list.filter((a) => a.actionType !== "security");
+  if (nonSecurity.length >= 2) return list.slice(0, 6);
+  const baseActs = base.structured?.recommendedActions ?? [];
+  const extras = baseActs.filter((a) => a.actionType !== "security").filter(pinF);
+  const merged: GXHealthRecommendedAction[] = [];
+  const seen = new Set<string>();
+  for (const a of [...extras, ...list]) {
+    const k = `${a.title}|${a.actionType}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    merged.push(a);
+    if (merged.length >= 6) break;
+  }
+  return merged;
+}
+
 /**
  * Optional Gemini copy — does not change the numeric score (still from rules).
  * Returns null if proxy unavailable or request fails (caller keeps fallback text).
  */
-export async function enrichGxHealthWithAi(context: GXHealthAnalysisContext): Promise<GXHealthAnalysisResult | null> {
+export async function enrichGxHealthWithAi(
+  context: GXHealthAnalysisContext,
+  meta?: GxHealthAiRequestMeta
+): Promise<GXHealthAnalysisResult | null> {
   const config = getAiConfig();
   const base = gxHealthAnalysisFallback(context);
   const pinOk = userHasPinSet();
-  if (!config.enabled) return null;
+
+  if (typeof __DEV__ !== "undefined" && __DEV__ && meta) {
+    // eslint-disable-next-line no-console
+    console.log("[GXHealth AI] request started", {
+      feature: "gxhealth_analysis",
+      reason: meta.reason,
+      requestKey: meta.requestKey,
+    });
+  }
+
+  if (!config.enabled) {
+    if (typeof __DEV__ !== "undefined" && __DEV__ && meta) {
+      // eslint-disable-next-line no-console
+      console.log("[GXHealth AI] complete", {
+        feature: "gxhealth_analysis",
+        reason: meta.reason,
+        requestKey: meta.requestKey,
+        provider: "local_skip",
+        success: false,
+        note: "endpoint not configured",
+      });
+    }
+    return null;
+  }
 
   try {
     const prompt = buildGXHealthPrompt(context.extended);
-    const res = await callSmartGxAi("gxhealth", prompt, context.extended as unknown as Record<string, unknown>, config);
+    const res = await callSmartGxAi(
+      "gxhealth_analysis",
+      prompt,
+      context.extended as unknown as Record<string, unknown>,
+      config
+    );
+
+    if (typeof __DEV__ !== "undefined" && __DEV__ && meta) {
+      // eslint-disable-next-line no-console
+      console.log("[GXHealth AI] complete", {
+        feature: "gxhealth_analysis",
+        reason: meta.reason,
+        requestKey: meta.requestKey,
+        provider: res?.provider ?? "fallback",
+        success: res?.success ?? false,
+        fallbackReason: res?.fallbackReason ?? res?.error ?? "network_or_timeout",
+      });
+    }
 
     if (!res?.success || !res.content.trim()) return null;
 
     const parsed = tryParseGxHealthStructured(res.content, res.structured ?? {});
     if (parsed) {
+      parsed.recommendedActions = diversifyAiGxRecommendations(parsed.recommendedActions, base, pinOk).map((a) => ({
+        ...a,
+        title: polishAiOutput(a.title),
+        reason: polishAiOutput(a.reason),
+        impact: polishAiOutput(a.impact),
+        suggestedAction: a.suggestedAction ? polishAiOutput(a.suggestedAction) : undefined,
+      }));
       const merged = structuredToFallbackStrings(parsed, base.tone);
       const withRecs = {
         ...merged,
@@ -432,7 +578,7 @@ export async function enrichGxHealthWithAi(context: GXHealthAnalysisContext): Pr
       return stripPinSetupRecommendationsIfConfigured(withRecs, pinOk);
     }
 
-    const plain = sanitizeAiCurrencyToRM(res.content.trim().slice(0, 2000));
+    const plain = polishAiOutput(res.content.trim().slice(0, 2000));
     return stripPinSetupRecommendationsIfConfigured(
       {
         ...base,

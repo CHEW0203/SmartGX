@@ -24,6 +24,8 @@ import { typography } from "../src/theme/typography";
 import { verifyUserPin } from "../src/features/security/sensitiveAction";
 import { sensitiveActionBlockedMessage, userHasPinSet } from "../src/store/securityStore";
 import { refreshChallengesForUser } from "../src/features/challenge/challengeIntegration";
+import { useHealthData } from "../src/hooks/useHealthData";
+import { useSavingsStore } from "../src/store/savingsStore";
 
 type FlowStep =
   | "landing"
@@ -199,6 +201,8 @@ export default function FlexiCreditScreen() {
   const transactions = useTransactionStore();
   const activity = useActivityStore();
   const fc = useFlexiCreditStore();
+  const health = useHealthData();
+  const savingsBuckets = useSavingsStore((s) => s.savingsBuckets);
 
   const hasRepaymentDue = useMemo(() => {
     const outstanding = safeNumber(fc.outstanding, 0);
@@ -251,7 +255,7 @@ export default function FlexiCreditScreen() {
   const drawdownAmount = Number(drawdownText) || 0;
   const tenureMonths = Math.max(1, Number(tenureText) || 1);
   const age = 24;
-  const gxScore = 68;
+  const gxScore = health.score;
   const monthlyExpenses = Math.max(900, Math.round(monthlyIncome * 0.62));
   const commitments = Math.max(200, Math.round(monthlyIncome * 0.08));
 
@@ -351,19 +355,32 @@ export default function FlexiCreditScreen() {
   const runAiReview = async () => {
     if (!borrowingValid) return;
     setAnalysisLoading(true);
+    const repaymentPreview = estimateRepayment(drawdownAmount, tenureMonths, DEFAULT_ANNUAL_INTEREST_RATE);
+    const totalSavingsPockets = savingsBuckets.bonus + savingsBuckets.emergency + savingsBuckets.goals;
     const result = await generateDebtReadinessAnalysis({
       requestedLimit: desiredLimit,
       desiredDrawdown: drawdownAmount,
       monthlyIncome,
       monthlyExpenses,
       existingMonthlyCommitments: commitments,
-      gxHealthScore: gxScore,
-      savingsBalance: account.mainBalance,
-      emergencyBalance: 800,
+      gxHealthScore: health.score,
+      savingsBalance: totalSavingsPockets,
+      emergencyBalance: savingsBuckets.emergency,
       repaymentHistoryScore: 72,
       employmentType,
       documentsQuality: allDocsReady ? "good" : "partial",
       purpose,
+      mainAccountBalance: account.mainBalance,
+      totalSavingsPockets,
+      flexiCreditOutstanding: fc.outstanding,
+      flexiApprovedLimit: fc.approvedLimit,
+      flexiAvailableCredit: fc.availableLimit,
+      flexiNextRepaymentDate: fc.nextRepaymentDate,
+      flexiMonthlyRepayment: fc.monthlyRepayment,
+      annualProfitRate: fc.annualInterestRate > 0 ? fc.annualInterestRate : DEFAULT_ANNUAL_INTEREST_RATE,
+      estimatedNewDrawdownMonthlyRepayment: repaymentPreview.monthlyRepayment,
+      estimatedNewDrawdownTotalRepayment: repaymentPreview.totalRepayment,
+      tenureMonths,
     });
     fc.setDebtAnalysis(result);
     fc.setSafeDrawdownRecommendation(result.recommendedDrawdown);

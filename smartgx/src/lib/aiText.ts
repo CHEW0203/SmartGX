@@ -14,3 +14,14 @@ export function sanitizeAiCurrencyToRM(text: string): string {
   s = s.replace(TRAILING_DOLLARS, (_, num: string) => `RM${num}`);
   return s;
 }
+
+/** Tone helper: many models overuse `; ` — swap for a full stop so sentences read naturally. */
+export function sanitizeAiSemicolonChains(text: string): string {
+  if (!text) return text;
+  return text.replace(/;\s+/g, ". ");
+}
+
+/** Currency + sentence cleanup for any user-visible SmartGX AI string. */
+export function polishAiOutput(text: string): string {
+  return sanitizeAiSemicolonChains(sanitizeAiCurrencyToRM(text));
+}

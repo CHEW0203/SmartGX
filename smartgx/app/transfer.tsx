@@ -23,6 +23,7 @@ import { useTransactionStore } from "../src/store/transactionStore";
 import { useNotificationStore } from "../src/store/notificationStore";
 import { useRecipientStore } from "../src/store/recipientStore";
 import { useSavingsStore } from "../src/store/savingsStore";
+import { useFlexiCreditStore } from "../src/store/flexiCreditStore";
 import { useAuthStore } from "../src/store/authStore";
 import { useActivityStore } from "../src/store/activityStore";
 import type { StoredRecipient, DuitNowIdType } from "../src/store/recipientStore";
@@ -207,6 +208,7 @@ export default function TransferScreen() {
     applyRoundUp,
     roundUpDestination,
   } = useSavingsStore();
+  const fc = useFlexiCreditStore();
   const currentUser = useAuthStore((s) => s.currentUser);
   const healthReport = useHealthData();
 
@@ -362,6 +364,7 @@ export default function TransferScreen() {
       cardType: "debit",
       merchant: activeRecipient.name,
       category: "others",
+      transactionDescription: reference.trim() || undefined,
       mainBalance: accountStore.mainBalance,
       flexiLimit: accountStore.flexiLimit,
       flexiUsed: accountStore.flexiUsed,
@@ -372,6 +375,15 @@ export default function TransferScreen() {
       savingsBalance,
       hasBudget: typeof maybeBudget === "number" && maybeBudget > 0,
       budgetAmount: maybeBudget ?? null,
+      emergencyPocketBalance: savingsBuckets.emergency,
+      flexiCreditBorrowingOutstanding: fc.outstanding,
+      flexiCreditMonthlyRepayment: fc.monthlyRepayment,
+      bonusPocketBalance: savingsBuckets.bonus,
+      goalsPocketBalance: savingsBuckets.goals,
+      gxHealthFactorScores: Object.fromEntries(healthReport.factors.map((f) => [f.key, f.score])) as Record<
+        string,
+        number
+      >,
     });
   };
 

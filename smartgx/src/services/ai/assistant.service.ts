@@ -2,16 +2,19 @@
  * SmartGX Assistant: local FAQ + remote hook via `invokeAssistantChat`.
  */
 
-import { invokeAssistantChat, type AssistantChatMessage } from "./ai.client";
+import { invokeAssistantChat, type AssistantChatMessage, type AssistantRemoteOutcome } from "./ai.client";
 import { getAiConfig } from "./ai.config";
 
-export type AssistantReplySource = "gemini" | "local" | "fallback";
+/** Where the visible reply came from — distinct from generic Gemini failure. */
+export type AssistantReplySource = "gemini" | "local_faq" | "fallback";
 
 const SYSTEM_PROMPT =
   "You are SmartGX Assistant, a concise in-app guide for the SmartGX personal finance app. " +
   "Answer in plain English, short paragraphs or bullets. " +
   "Do not mention other banks by name. Do not say the app is a prototype or uses fake money. " +
-  "If unsure, suggest the user open the relevant SmartGX screen (Saving & Automation, Transfer, FlexiCredit, Security Center, etc.).";
+  "If unsure, suggest the user open the relevant SmartGX screen (Saving & Automation, Transfer, FlexiCredit, Security Center, etc.). " +
+  "Write in natural sentences. Do not use semicolons. Use Malaysian Ringgit format such as RM100. Do not use $, USD, or dollars. " +
+  "Base your answer on the conversation and common SmartGX behaviour only.";
 
 export const ASSISTANT_QUICK_FAQ: { q: string; a: string }[] = [
   {
@@ -218,29 +221,55 @@ export function findLocalAssistantAnswer(userMessage: string): string | null {
   return best?.a ?? null;
 }
 
+function logAssistantOutcome(remote: AssistantRemoteOutcome | null, finalSource: AssistantReplySource, fallbackReason?: string | null) {
+  const verbose = typeof process !== "undefined" && process.env.EXPO_PUBLIC_SMARTGX_AI_VERBOSE === "1";
+  if (typeof __DEV__ === "undefined" || (!__DEV__ && !verbose)) return;
+  // eslint-disable-next-line no-console
+  console.log("[SmartGX Assistant reply]", {
+    feature: "assistant",
+    remoteSuccess: remote?.success ?? null,
+    remoteProvider: remote?.provider ?? null,
+    finalSource,
+    fallbackReason: fallbackReason ?? remote?.fallbackReason ?? null,
+  });
+}
+
 export async function getAssistantReplyDetailed(
   userMessage: string,
   history: { role: "user" | "assistant"; content: string }[]
-): Promise<{ text: string; source: AssistantReplySource }> {
+): Promise<{
+  text: string;
+  source: AssistantReplySource;
+  model?: string;
+  fallbackReason?: string | null;
+}> {
   const trimmed = userMessage.trim();
   const config = getAiConfig();
 
+  let remote: AssistantRemoteOutcome | null = null;
   if (config.remoteAiEnabled && config.fallbackEnabled) {
     const messages: AssistantChatMessage[] = [
       { role: "system", content: SYSTEM_PROMPT },
       ...history.map((h) => ({ role: h.role, content: h.content })),
       { role: "user", content: trimmed },
     ];
-    const remote = await invokeAssistantChat(messages);
-    if (remote) return { text: remote, source: "gemini" };
+    remote = await invokeAssistantChat(messages);
+    if (remote?.success && remote.text) {
+      logAssistantOutcome(remote, "gemini", null);
+      return { text: remote.text, source: "gemini", model: remote.model || undefined, fallbackReason: null };
+    }
   }
 
   if (config.fallbackEnabled) {
     const local = findLocalAssistantAnswer(trimmed);
-    if (local) return { text: local, source: "local" };
+    if (local) {
+      logAssistantOutcome(remote, "local_faq", remote?.fallbackReason ?? null);
+      return { text: local, source: "local_faq", fallbackReason: remote?.fallbackReason ?? null };
+    }
   }
 
-  return { text: GENERIC_FALLBACK, source: "fallback" };
+  logAssistantOutcome(remote, "fallback", remote?.fallbackReason ?? "no_local_faq_match");
+  return { text: GENERIC_FALLBACK, source: "fallback", fallbackReason: remote?.fallbackReason ?? "no_local_faq_match" };
 }
 
 export async function getAssistantReply(

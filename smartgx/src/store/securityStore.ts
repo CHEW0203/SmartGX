@@ -24,6 +24,9 @@ export interface ScamAnalysisResult {
   explanation: string;
   recommendation: string;
   signals: string[];
+  provider?: "gemini" | "fallback";
+  redFlags?: string[];
+  avoidDoing?: string[];
 }
 
 const LOCK_MS = 5 * 60 * 1000;

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { Redirect, router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -14,6 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useAuth } from "../src/hooks/useAuth";
+import { useHealthData } from "../src/hooks/useHealthData";
+import { enrichSavingAllocationExplanation } from "../src/features/ai/savingsAllocation.ai";
 import { useSavingsStore } from "../src/store/savingsStore";
 import { useAccountStore } from "../src/store/accountStore";
 import { useNotificationStore } from "../src/store/notificationStore";
@@ -190,6 +192,9 @@ export default function SavingsScreen() {
   const { addActivity } = useActivityStore();
   const currentStreak = useGamificationStore((s) => s.currentStreak);
   const streakMilestonesClaimed = useGamificationStore((s) => s.streakMilestonesClaimed);
+  const health = useHealthData();
+
+  const [allocationAiText, setAllocationAiText] = useState<string | null>(null);
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveAmount, setSaveAmount] = useState("");
@@ -218,13 +223,64 @@ export default function SavingsScreen() {
   const savedFromThisIncome = latestAutoAllocation
     ? Math.round((lastAllocation.bonusPocket + lastAllocation.emergencyFund + lastAllocation.goalSavings) * 100) / 100
     : 0;
-  const aiRec          = getAIRecommendation({
-    currentRule:      allocationRule,
-    monthlyIncome:    allocationPreviewIncome,
-    monthlySpend:     allocationPreviewIncome * 0.63,
-    emergencyBalance: allocationPreviewIncome * 0.10,
-    debtRatio:        0.05,
-  });
+  const aiRec = useMemo(
+    () =>
+      getAIRecommendation({
+        currentRule: allocationRule,
+        monthlyIncome: allocationPreviewIncome,
+        monthlySpend: allocationPreviewIncome * 0.63,
+        emergencyBalance: allocationPreviewIncome * 0.1,
+        debtRatio: 0.05,
+      }),
+    [allocationRule, allocationPreviewIncome]
+  );
+
+  useEffect(() => {
+    if (!useAIAllocation) {
+      setAllocationAiText(null);
+      return;
+    }
+    setAllocationAiText(null);
+    let cancelled = false;
+    const emergencyTargetRm = Math.max(500, allocationPreviewIncome * 0.35);
+    void enrichSavingAllocationExplanation({
+      localRecommendation: aiRec,
+      monthlyIncome: allocationPreviewIncome,
+      monthlySpend: allocationPreviewIncome * 0.63,
+      mainAccountBalance: accountStore.mainBalance,
+      bonusBalance: savingsBuckets.bonus,
+      emergencyBalance: savingsBuckets.emergency,
+      goalsBalance: savingsBuckets.goals,
+      emergencyTargetRm,
+      gxHealthScore: health.score,
+      savingStreakDays: currentStreak,
+      lastAutoAllocation: latestAutoAllocation
+        ? {
+            amount: latestAutoAllocation.amount,
+            spendingWallet: latestAutoAllocation.breakdown.spendingWallet,
+            bonusPocket: latestAutoAllocation.breakdown.bonus,
+            emergencyFund: latestAutoAllocation.breakdown.emergency,
+            goalSavings: latestAutoAllocation.breakdown.goals,
+          }
+        : null,
+    }).then((text) => {
+      if (!cancelled && text) setAllocationAiText(text);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    useAIAllocation,
+    aiRec,
+    allocationPreviewIncome,
+    accountStore.mainBalance,
+    savingsBuckets.bonus,
+    savingsBuckets.emergency,
+    savingsBuckets.goals,
+    health.score,
+    currentStreak,
+    latestAutoAllocation,
+  ]);
 
   const bonusBalance     = savingsBuckets.bonus;
   const emergencyBalance = savingsBuckets.emergency;
@@ -657,7 +713,7 @@ export default function SavingsScreen() {
 
             {useAI && (
               <View style={styles.aiExplainBox}>
-                <Text style={styles.aiExplainText}>{aiRec.insight}</Text>
+                <Text style={styles.aiExplainText}>{allocationAiText ?? aiRec.insight}</Text>
               </View>
             )}
 

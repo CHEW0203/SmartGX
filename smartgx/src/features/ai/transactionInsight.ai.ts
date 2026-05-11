@@ -1,7 +1,8 @@
 import type { TransactionCategory } from "../../types/transaction";
 import { callSmartGxAi } from "../../services/ai/ai.client";
 import { getAiConfig } from "../../services/ai/ai.config";
-import { sanitizeAiCurrencyToRM } from "../../lib/aiText";
+import { polishAiOutput } from "../../lib/aiText";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 import type { MonthSpendForecastResult } from "../transactions/transactionForecast";
 
 export interface TransactionInsightRecentTxn {
@@ -27,6 +28,9 @@ export interface TransactionInsightContext {
   hasCreditSpending: boolean;
   mainAccountBalance: number;
   totalSavings: number;
+  emergencyBalance?: number;
+  bonusBalance?: number;
+  goalsBalance?: number;
   gxHealthScore: number;
   forecast: MonthSpendForecastResult;
   top3ExpenseCategories: Array<{ label: string; amount: number }>;
@@ -102,7 +106,10 @@ function buildStructuredFallback(ctx: TransactionInsightContext): TransactionIns
 
   const summary = `This month you spent ${formatRmInt(ctx.totalExpense)} against ${formatRmInt(ctx.totalIncome)} income, leaving about ${formatRmInt(ctx.netCashflow)} net cashflow so far. Main Account is ${formatRmInt(ctx.mainAccountBalance)}.`;
   const currentPattern = `Daily spend is averaging ${formatRmInt(fc.averageDailyExpense)} over ${fc.daysPassedInMonth} day(s) in the month. If that pace continues for ${fc.daysRemainingInMonth} more day(s), modelled extra spend is about ${formatRmInt(fc.projectedAdditionalExpense)}.`;
-  const riskExplanation = `${fc.cashflowRiskMessage} ${fc.debtPressureNote}`;
+  const emergNote = typeof ctx.emergencyBalance === "number" && ctx.emergencyBalance > 0
+    ? ` Emergency pocket is ${formatRmInt(ctx.emergencyBalance)}, which ${ctx.emergencyBalance >= ctx.totalExpense * 0.3 ? "adds some buffer" : "is thin relative to spending"}.`
+    : "";
+  const riskExplanation = `${fc.cashflowRiskMessage} ${fc.debtPressureNote}${emergNote}`;
 
   const actions: TransactionInsightAction[] = [];
   if (top) {
@@ -141,24 +148,24 @@ function buildStructuredFallback(ctx: TransactionInsightContext): TransactionIns
   }
 
   return {
-    summary: sanitizeAiCurrencyToRM(summary),
-    currentPattern: sanitizeAiCurrencyToRM(currentPattern),
-    topDrivers: drivers.map(sanitizeAiCurrencyToRM),
+    summary: polishAiOutput(summary),
+    currentPattern: polishAiOutput(currentPattern),
+    topDrivers: drivers.map(polishAiOutput),
     monthEndForecast: {
-      projectedExpense: sanitizeAiCurrencyToRM(monthEndForecast.projectedExpense),
-      projectedRemainingBalance: sanitizeAiCurrencyToRM(monthEndForecast.projectedRemainingBalance),
+      projectedExpense: polishAiOutput(monthEndForecast.projectedExpense),
+      projectedRemainingBalance: polishAiOutput(monthEndForecast.projectedRemainingBalance),
       cashflowRisk: monthEndForecast.cashflowRisk,
       debtPressure: monthEndForecast.debtPressure,
     },
-    riskExplanation: sanitizeAiCurrencyToRM(riskExplanation),
+    riskExplanation: polishAiOutput(riskExplanation),
     recommendedActions: actions.map((a) => ({
       ...a,
-      title: sanitizeAiCurrencyToRM(a.title),
-      reason: sanitizeAiCurrencyToRM(a.reason),
-      suggestedAmount: sanitizeAiCurrencyToRM(a.suggestedAmount),
-      timeframe: sanitizeAiCurrencyToRM(a.timeframe),
+      title: polishAiOutput(a.title),
+      reason: polishAiOutput(a.reason),
+      suggestedAmount: polishAiOutput(a.suggestedAmount),
+      timeframe: polishAiOutput(a.timeframe),
     })),
-    priorityAction: sanitizeAiCurrencyToRM(
+    priorityAction: polishAiOutput(
       actions[0]
         ? `${actions[0].title}: ${actions[0].reason}`
         : "Review top categories and slow discretionary spend for one week."
@@ -177,7 +184,7 @@ function structuredToDisplay(s: TransactionInsightStructured, title: string, con
     "",
     s.currentPattern,
     "",
-    `Top drivers: ${s.topDrivers.join("; ")}.`,
+    `Top drivers: ${s.topDrivers.join(". ")}.`,
     "",
     `Month-end model (if pace continues): spend about ${s.monthEndForecast.projectedExpense}, Main Account around ${s.monthEndForecast.projectedRemainingBalance}. Cashflow risk: ${s.monthEndForecast.cashflowRisk}. Debt pressure: ${s.monthEndForecast.debtPressure}.`,
     "",
@@ -216,18 +223,27 @@ export function buildTransactionInsightPrompt(_ctx: TransactionInsightContext): 
   return [
     "You are SmartGX AI, a transaction and cashflow analyst for Malaysian youth.",
     "Use ONLY the JSON context, including pre-calculated forecast numbers — do not invent different arithmetic.",
-    "Explain what is happening now, which categories drive spend, and what month-end may look like if the pace continues.",
-    "Use Malaysian Ringgit format only: RM100, RM1,200, RM5,000. Never $, USD, or dollars.",
+    "",
+    "Your analysis must answer these questions using the context data:",
+    "1. What has happened so far this month? (income vs expenses, net cashflow)",
+    "2. Which spending categories are driving expenses? (use context.top3ExpenseCategories)",
+    "3. What is the current daily spending pace?",
+    "4. At the current pace, what will the month-end balance look like? (use context.forecast projections)",
+    "5. Will the user likely still have enough buffer? Compare projected month-end balance against Emergency balance.",
+    "6. Is there risk of needing FlexiCredit or credit? (check flexiCreditOutstanding, flexiCardUsed)",
+    "7. What practical action should the user take this week?",
+    "",
+    SMARTGX_AI_WRITING_RULES,
     "Output ONE JSON object only (no markdown fences). Keys:",
-    '"summary" (2–3 sentences),',
-    '"currentPattern" (2–3 sentences referencing averages),',
+    '"summary" (2–3 sentences covering income, expenses, and month-end outlook),',
+    '"currentPattern" (2–3 sentences referencing daily averages and pace),',
     '"topDrivers" (array of 2–4 strings with category + RM amounts),',
     '"monthEndForecast": { "projectedExpense", "projectedRemainingBalance" (strings with RM), "cashflowRisk", "debtPressure" }',
     "must match the context forecast cashflowRisk/debtPressure levels exactly,",
-    '"riskExplanation" (2–3 sentences),',
+    '"riskExplanation" (2–3 sentences explaining what happens if pace continues, mentioning Emergency balance if context has it),',
     '"recommendedActions": [{ "title", "reason", "suggestedAmount", "timeframe" }], 3–5 items, practical for Malaysia,',
-    '"priorityAction" (one sentence).',
-    "Do not recommend borrowing to cover overspending.",
+    '"priorityAction" (one sentence with a specific weekly action).',
+    "Do not recommend borrowing to cover overspending. Do not show NaN or undefined.",
   ].join(" ");
 }
 
@@ -289,24 +305,24 @@ function parseStructured(
     const priorityAction = typeof j.priorityAction === "string" ? j.priorityAction.trim() : "";
 
     return {
-      summary: sanitizeAiCurrencyToRM(summary),
-      currentPattern: sanitizeAiCurrencyToRM(currentPattern),
-      topDrivers: topDrivers.map(sanitizeAiCurrencyToRM),
+      summary: polishAiOutput(summary),
+      currentPattern: polishAiOutput(currentPattern),
+      topDrivers: topDrivers.map(polishAiOutput),
       monthEndForecast: {
-        projectedExpense: sanitizeAiCurrencyToRM(monthEndForecast.projectedExpense),
-        projectedRemainingBalance: sanitizeAiCurrencyToRM(monthEndForecast.projectedRemainingBalance),
+        projectedExpense: polishAiOutput(monthEndForecast.projectedExpense),
+        projectedRemainingBalance: polishAiOutput(monthEndForecast.projectedRemainingBalance),
         cashflowRisk: monthEndForecast.cashflowRisk,
         debtPressure: monthEndForecast.debtPressure,
       },
-      riskExplanation: sanitizeAiCurrencyToRM(riskExplanation || ctx.forecast.cashflowRiskMessage),
+      riskExplanation: polishAiOutput(riskExplanation || ctx.forecast.cashflowRiskMessage),
       recommendedActions: recommendedActions.map((a) => ({
         ...a,
-        title: sanitizeAiCurrencyToRM(a.title),
-        reason: sanitizeAiCurrencyToRM(a.reason),
-        suggestedAmount: sanitizeAiCurrencyToRM(a.suggestedAmount),
-        timeframe: sanitizeAiCurrencyToRM(a.timeframe),
+        title: polishAiOutput(a.title),
+        reason: polishAiOutput(a.reason),
+        suggestedAmount: polishAiOutput(a.suggestedAmount),
+        timeframe: polishAiOutput(a.timeframe),
       })),
-      priorityAction: sanitizeAiCurrencyToRM(priorityAction || recommendedActions[0]?.title || ""),
+      priorityAction: polishAiOutput(priorityAction || recommendedActions[0]?.title || ""),
     };
   };
 
@@ -344,7 +360,7 @@ export async function enrichTransactionInsightWithGemini(ctx: TransactionInsight
       return structuredToDisplay(parsed, base.insightTitle, base.concernLevel);
     }
 
-    const plain = sanitizeAiCurrencyToRM(res.content.trim().slice(0, 2500));
+    const plain = polishAiOutput(res.content.trim().slice(0, 2500));
     return {
       ...base,
       insightMessage: plain.split("\n")[0] ?? plain,

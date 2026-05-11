@@ -6,6 +6,7 @@ export {
   testSmartGxAiConnection,
   type AiStructuredRequest,
   type AssistantChatMessage,
+  type AssistantRemoteOutcome,
   type SmartGxAiFeature,
   type SmartGxAiResponse,
 } from "./ai.client";

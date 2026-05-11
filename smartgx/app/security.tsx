@@ -17,6 +17,7 @@ import {
   generateDeviceRiskExplanation,
   generateSecurityRecommendation,
   generateSecurityRecommendationWithGemini,
+  type ScamCheckSecurityContext,
 } from "../src/features/ai/security.ai";
 import {
   computeSecurityScoreDetail,
@@ -116,6 +117,14 @@ export default function SecurityScreen() {
       emergencyLock: sec.emergencyLock,
       pinSet,
       deviceTrusted: sec.deviceTrusted,
+      securityScore: score.score,
+      securityStatusLabel: score.status,
+      scamProtectionSummary: score.breakdown.scamProtection,
+      deviceSafetyStatus: score.breakdown.safetyCheck,
+      transactionAlertsEnabled: sec.transactionAlertsEnabled,
+      mockSuspiciousSession: sec.mockSuspiciousSession,
+      mockRiskyLinkFlag: sec.mockRiskyLinkFlag,
+      wrongPinAttempts: sec.wrongPinAttempts,
     }).then((text) => {
       if (!cancelled) setReco(text);
     });
@@ -154,7 +163,13 @@ export default function SecurityScreen() {
   const runScamCheck = async () => {
     setScamLoading(true);
     try {
-      const r = await analyzeScamMessageOrLink(scamInput);
+      const secCtx: ScamCheckSecurityContext = {
+        securityScore: score.score,
+        scamProtectionEnabled: true,
+        deviceSafetyStatus: score.breakdown.safetyCheck,
+        emergencyLockActive: sec.emergencyLock,
+      };
+      const r = await analyzeScamMessageOrLink(scamInput, secCtx);
       sec.setLastScamCheck(r);
     } finally {
       setScamLoading(false);
@@ -314,21 +329,48 @@ export default function SecurityScreen() {
         </Section>
 
         <Section title="Scam & risky message check">
-          <Text style={s.muted}>Paste a message or link. SmartGX estimates risk using on-device rules (and optional AI when configured).</Text>
-          <TextInput style={s.textArea} multiline value={scamInput} onChangeText={setScamInput} placeholder="Paste content..." placeholderTextColor="#6B5F86" />
+          <Text style={s.muted}>Paste a suspicious message or link. SmartGX will analyze it for scam patterns using AI.</Text>
+          <TextInput style={s.textArea} multiline value={scamInput} onChangeText={setScamInput} placeholder="Paste suspicious message or link here..." placeholderTextColor="#6B5F86" />
           <Pressable style={s.primaryBtn} onPress={runScamCheck} disabled={scamLoading}>
             <Text style={s.primaryBtnText}>{scamLoading ? "Analyzing…" : "Analyze"}</Text>
           </Pressable>
           {sec.lastScamCheck ? (
             <View style={s.resultBox}>
-              <Text style={s.rowStrong}>Risk: {sec.lastScamCheck.risk}</Text>
-              <Text style={s.muted}>{sec.lastScamCheck.explanation}</Text>
-              <Text style={s.muted}>{sec.lastScamCheck.recommendation}</Text>
+              <View style={s.riskRow}>
+                <Text style={[
+                  s.riskBadge,
+                  sec.lastScamCheck.risk === "high" ? s.riskHigh
+                  : sec.lastScamCheck.risk === "medium" ? s.riskMedium
+                  : s.riskLow
+                ]}>
+                  {sec.lastScamCheck.risk.toUpperCase()}
+                </Text>
+                {sec.lastScamCheck.provider ? (
+                  <Text style={s.providerLabel}>
+                    AI: {sec.lastScamCheck.provider === "gemini" ? "Gemini" : "Fallback"}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={s.resultExplanation}>{sec.lastScamCheck.explanation}</Text>
+              {sec.lastScamCheck.redFlags && sec.lastScamCheck.redFlags.length > 0 ? (
+                <View style={s.flagsSection}>
+                  <Text style={s.flagsTitle}>Red Flags</Text>
+                  {sec.lastScamCheck.redFlags.map((flag, i) => (
+                    <Text key={i} style={s.flagItem}>• {flag}</Text>
+                  ))}
+                </View>
+              ) : null}
+              <Text style={s.resultRecommendation}>{sec.lastScamCheck.recommendation}</Text>
+              {sec.lastScamCheck.avoidDoing && sec.lastScamCheck.avoidDoing.length > 0 ? (
+                <View style={s.flagsSection}>
+                  <Text style={s.avoidTitle}>Do Not</Text>
+                  {sec.lastScamCheck.avoidDoing.map((item, i) => (
+                    <Text key={i} style={s.avoidItem}>• {item}</Text>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
-          <Pressable style={s.secondaryBtn} onPress={() => sec.setMockRiskyLinkFlag(!sec.mockRiskyLinkFlag)}>
-            <Text style={s.secondaryBtnText}>{sec.mockRiskyLinkFlag ? "Clear risky link flag" : "Simulate flagged risky link"}</Text>
-          </Pressable>
         </Section>
 
         <Section title="Transaction security">
@@ -469,5 +511,18 @@ const s = StyleSheet.create({
   checkRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   okDot: { color: "#22C55E", fontWeight: "900" },
   badDot: { color: "#FB923C", fontWeight: "900" },
-  resultBox: { borderRadius: 12, borderWidth: 1, borderColor: "rgba(56,189,248,0.3)", padding: 10, gap: 4 },
+  resultBox: { borderRadius: 12, borderWidth: 1, borderColor: "rgba(56,189,248,0.3)", padding: 12, gap: 8 },
+  riskRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  riskBadge: { fontWeight: "800", fontSize: 12, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
+  riskHigh: { backgroundColor: "rgba(239,68,68,0.25)", color: "#EF4444" },
+  riskMedium: { backgroundColor: "rgba(245,158,11,0.25)", color: "#F59E0B" },
+  riskLow: { backgroundColor: "rgba(34,197,94,0.25)", color: "#22C55E" },
+  providerLabel: { color: "#94A3B8", fontSize: 11, fontWeight: "600" },
+  resultExplanation: { color: "#E2E8F0", fontSize: 13, lineHeight: 20 },
+  resultRecommendation: { color: "#A78BFA", fontSize: 13, lineHeight: 20, fontWeight: "600" },
+  flagsSection: { gap: 2 },
+  flagsTitle: { color: "#EF4444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  flagItem: { color: "#FCA5A5", fontSize: 12, paddingLeft: 4 },
+  avoidTitle: { color: "#F59E0B", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  avoidItem: { color: "#FDE68A", fontSize: 12, paddingLeft: 4 },
 });

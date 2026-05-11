@@ -7,7 +7,9 @@ Runs a small Express API so the **Expo app never sees your Gemini API key**.
 - `GET /health` — `{ ok, provider, hasGeminiKey, port }`
 - `POST /api/ai` — body: `{ feature, prompt, context }` (see app `SmartGxAiFeature` types)
 
-Features include: `assistant`, `gxhealth`, `transaction_insight`, `nudge`, `critical_reason`, `income_classification`, `debt_readiness`, `scam_check`, `security`, `tree_health`, `mission`, `smartscore`.
+Features include: `assistant`, `gxhealth_analysis`, `gxhealth_recommended_action`, `transaction_insight`, `smart_ai_nudge`, `critical_risk_nudge`, `income_classification`, `flexicredit_debt_readiness`, `scam_message_check`, `security_risk_check`, `saving_allocation_explanation`, `tree_health`, `mission`, `smartscore`.
+
+Each successful request logs a single line: `feature`, `provider`, `model`, and `success` (never the API key or full prompt).
 
 ## Setup
 

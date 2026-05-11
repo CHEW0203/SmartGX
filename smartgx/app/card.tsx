@@ -20,6 +20,7 @@ import { useAccountStore } from "../src/store/accountStore";
 import { useTransactionStore } from "../src/store/transactionStore";
 import { useNotificationStore } from "../src/store/notificationStore";
 import { useSavingsStore } from "../src/store/savingsStore";
+import { useFlexiCreditStore } from "../src/store/flexiCreditStore";
 import { useActivityStore } from "../src/store/activityStore";
 import { generateMockTransaction } from "../src/data/mockMerchants";
 import type { GeneratedTransaction } from "../src/data/mockMerchants";
@@ -322,6 +323,7 @@ export default function CardScreen() {
     applyRoundUp,
     roundUpDestination,
   } = useSavingsStore();
+  const fc = useFlexiCreditStore();
   const healthReport = useHealthData();
 
   // Card reveal state (session-only for security)
@@ -510,6 +512,15 @@ export default function CardScreen() {
         savingsBuckets.bonus + savingsBuckets.emergency + savingsBuckets.goals,
       hasBudget: typeof maybeBudget === "number" && maybeBudget > 0,
       budgetAmount: maybeBudget ?? null,
+      emergencyPocketBalance: savingsBuckets.emergency,
+      flexiCreditBorrowingOutstanding: fc.outstanding,
+      flexiCreditMonthlyRepayment: fc.monthlyRepayment,
+      bonusPocketBalance: savingsBuckets.bonus,
+      goalsPocketBalance: savingsBuckets.goals,
+      gxHealthFactorScores: Object.fromEntries(healthReport.factors.map((f) => [f.key, f.score])) as Record<
+        string,
+        number
+      >,
     });
   };
 

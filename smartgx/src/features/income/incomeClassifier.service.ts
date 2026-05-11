@@ -1,4 +1,5 @@
 import { getAiConfig } from "../ai/ai.config";
+import { SMARTGX_AI_WRITING_RULES } from "../../services/ai/aiPromptStyle";
 import { callSmartGxAi } from "../../services/ai/ai.client";
 
 export type IncomingDetectedType =
@@ -198,6 +199,7 @@ async function classifyIncomingReceiptRemote(input: IncomingClassifierInput): Pr
         "Reply JSON only with keys: detectedType, confidence (high|medium|low), shouldAutoAllocate (boolean),",
         "reason (short string), allocationPriority (apply|ask|skip), aiExplanation (one sentence).",
         "detectedType must be one of: salary, allowance, part_time_income, freelance_income, cash_income, transfer_in, refund, cashback, unknown.",
+        SMARTGX_AI_WRITING_RULES,
       ].join(" "),
       {
         amount: input.receipt.amount,

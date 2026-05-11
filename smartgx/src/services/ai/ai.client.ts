@@ -10,25 +10,36 @@ const REQUEST_TIMEOUT_MS = 14_000;
 
 export type SmartGxAiFeature =
   | "assistant"
-  | "gxhealth"
+  /** GXHealth SmartGX analysis + recommended actions (single structured response). */
+  | "gxhealth_analysis"
+  /** Reserved for a focused “next best action” call; same server routing as analysis when used. */
+  | "gxhealth_recommended_action"
   | "transaction_insight"
-  | "nudge"
-  | "critical_reason"
+  | "smart_ai_nudge"
+  | "critical_risk_nudge"
   | "income_classification"
-  | "debt_readiness"
-  | "scam_check"
-  | "security"
+  | "flexicredit_debt_readiness"
+  | "scam_message_check"
+  | "security_risk_check"
+  | "saving_allocation_explanation"
   | "tree_health"
   | "mission"
   | "smartscore";
 
+export type SmartGxAiProviderId = "gemini" | "fallback" | (string & {});
+
 export interface SmartGxAiResponse {
   success: boolean;
-  provider: string;
+  /** From server: "gemini" when the model returned content, "fallback" when the server used a fallback path. */
+  provider: SmartGxAiProviderId;
+  feature: string;
   model: string;
   content: string;
   structured: Record<string, unknown>;
   error: string | null;
+  fallbackReason: string | null;
+  /** Dev-only short hint about what went wrong. Never contains API keys. */
+  debugError?: string;
 }
 
 export interface AssistantChatMessage {
@@ -36,12 +47,19 @@ export interface AssistantChatMessage {
   content: string;
 }
 
-/** Every request/timeout/success line — off by default; set EXPO_PUBLIC_SMARTGX_AI_VERBOSE=1 to trace. */
-const AI_TRACE =
+/** Verbose internal traces — off by default; set EXPO_PUBLIC_SMARTGX_AI_VERBOSE=1 to enable. */
+const AI_VERBOSE =
   typeof process !== "undefined" && process.env.EXPO_PUBLIC_SMARTGX_AI_VERBOSE === "1";
 
 function devTrace(...args: unknown[]) {
-  if (typeof __DEV__ === "undefined" || !__DEV__ || !AI_TRACE) return;
+  if (typeof __DEV__ === "undefined" || !__DEV__ || !AI_VERBOSE) return;
+  // eslint-disable-next-line no-console
+  console.log("[SmartGX AI]", ...args);
+}
+
+/** Always-on in dev — ensures network failures and key events are never silent. */
+function devLog(...args: unknown[]) {
+  if (typeof __DEV__ === "undefined" || !__DEV__) return;
   // eslint-disable-next-line no-console
   console.log("[SmartGX AI]", ...args);
 }
@@ -54,16 +72,16 @@ export async function callSmartGxAi(
   config: AiConfig = getAiConfig()
 ): Promise<SmartGxAiResponse | null> {
   if (!config.enabled || !config.endpoint.startsWith("http")) {
-    devTrace("endpoint not configured; skip remote", { feature });
+    devLog("[AI Request Skip]", { feature, reason: "endpoint_not_configured", endpoint: config.endpoint || "(empty)" });
     return null;
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  try {
-    devTrace("request", { feature, endpointHost: config.endpoint.replace(/\/api\/ai\/?$/, "") });
+  devLog("[AI Request Start]", { feature, endpoint: config.endpoint, hasContext: Object.keys(context).length > 0 });
 
+  try {
     const res = await fetch(config.endpoint, {
       method: "POST",
       headers: {
@@ -78,7 +96,7 @@ export async function callSmartGxAi(
 
     const raw: unknown = await res.json().catch(() => null);
     if (!raw || typeof raw !== "object") {
-      devTrace("invalid JSON body", { feature, fallbackUsed: true });
+      devLog("[AI Response Error]", { feature, reason: "invalid_json_body", httpStatus: res.status });
       return null;
     }
 
@@ -90,19 +108,41 @@ export async function callSmartGxAi(
         ? (o.structured as Record<string, unknown>)
         : {};
     const error = o.error == null ? null : String(o.error);
-    const provider = typeof o.provider === "string" ? o.provider : "gemini";
+    const serverProvider = typeof o.provider === "string" ? o.provider : "fallback";
+    const provider = (serverProvider === "gemini" ? "gemini" : "fallback") as SmartGxAiProviderId;
     const model = typeof o.model === "string" ? o.model : "";
+    const featureEcho = typeof o.feature === "string" ? o.feature : feature;
+    const fallbackReason = o.fallbackReason == null ? null : String(o.fallbackReason);
+
+    const debugError = typeof o.debugError === "string" ? o.debugError : undefined;
 
     if (!success) {
-      devTrace("server reported failure", { feature, provider, fallbackUsed: true, error: error || "unknown" });
-      return { success: false, provider, model, content: "", structured, error: error || "AI error" };
+      devLog("[AI Response]", { feature: featureEcho, provider, success: false, fallbackReason: fallbackReason || error || "unknown", debugError: debugError || null });
+      return {
+        success: false,
+        provider,
+        feature: featureEcho,
+        model,
+        content: "",
+        structured,
+        error: error || "AI error",
+        fallbackReason: fallbackReason || error,
+      };
     }
 
-    devTrace("ok", { feature, provider, model, fallbackUsed: false });
-    return { success: true, provider, model, content, structured, error: null };
-  } catch {
+    devLog("[AI Response]", { feature: featureEcho, provider, model, success: true });
+    devTrace("response detail", { debugError: debugError || null, contentLength: content.length });
+    return { success: true, provider, feature: featureEcho, model, content, structured, error: null, fallbackReason: null, debugError };
+  } catch (err: unknown) {
     clearTimeout(timer);
-    devTrace("network/timeout", { feature, fallbackUsed: true });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    devLog("[AI Request Failed]", {
+      feature,
+      reason: isAbort ? "timeout" : "network_error",
+      error: errMsg.slice(0, 200),
+      endpoint: config.endpoint,
+    });
     return null;
   }
 }
@@ -121,7 +161,7 @@ export async function testSmartGxAiConnection(
   }
 
   const res = await callSmartGxAi("assistant", "Reply with: SmartGX AI online.", {}, config);
-  if (res?.success && res.content.trim()) {
+  if (res?.success && res.content.trim() && res.provider === "gemini") {
     return {
       ok: true,
       headline: "Connected to Gemini",
@@ -132,8 +172,8 @@ export async function testSmartGxAiConnection(
   if (res && !res.success) {
     return {
       ok: false,
-      headline: "Error",
-      detail: res.error || "AI server returned an error.",
+      headline: res.provider === "fallback" ? "Using fallback" : "Error",
+      detail: res.fallbackReason || res.error || "AI server returned an error.",
       raw: res,
     };
   }
@@ -145,11 +185,20 @@ export async function testSmartGxAiConnection(
   };
 }
 
-/** SmartGX Assistant: chat transcript → natural language reply */
+/** Outcome from assistant remote call — used for accurate Gemini vs fallback labelling. */
+export interface AssistantRemoteOutcome {
+  text: string;
+  provider: "gemini" | "fallback";
+  model: string;
+  success: boolean;
+  fallbackReason: string | null;
+}
+
+/** SmartGX Assistant: chat transcript → natural language reply (or null to use local FAQ / generic fallback). */
 export async function invokeAssistantChat(
   messages: AssistantChatMessage[],
   config: AiConfig = getAiConfig()
-): Promise<string | null> {
+): Promise<AssistantRemoteOutcome | null> {
   if (!config.enabled) return null;
 
   const transcript = messages
@@ -169,9 +218,36 @@ export async function invokeAssistantChat(
     config
   );
 
-  if (!res?.success) return null;
-  const text = res.content?.trim() ?? "";
-  return text.length > 0 ? text : null;
+  if (!res) {
+    devLog("[Assistant]", { feature: "assistant", provider: "fallback", success: false, fallbackReason: "network_or_timeout" });
+    return null;
+  }
+
+  devLog("[Assistant]", {
+    feature: res.feature || "assistant",
+    provider: res.provider,
+    success: res.success,
+    fallbackReason: res.fallbackReason ?? res.error ?? null,
+  });
+
+  const trimmed = res.content.trim();
+  if (res.success && trimmed && res.provider === "gemini") {
+    return {
+      text: trimmed,
+      provider: "gemini",
+      model: res.model,
+      success: true,
+      fallbackReason: null,
+    };
+  }
+
+  return {
+    text: "",
+    provider: "fallback",
+    model: res.model,
+    success: false,
+    fallbackReason: res.fallbackReason || res.error || "remote_failed",
+  };
 }
 
 /** @deprecated Use callSmartGxAi with a SmartGxAiFeature */
@@ -194,14 +270,14 @@ export interface AiStructuredRequest {
 
 const CAPABILITY_FEATURE: Record<AiStructuredRequest["capability"], SmartGxAiFeature> = {
   assistant_chat: "assistant",
-  gxhealth_analysis: "gxhealth",
+  gxhealth_analysis: "gxhealth_analysis",
   transaction_insight: "transaction_insight",
-  smart_nudge: "nudge",
-  critical_reason: "critical_reason",
+  smart_nudge: "smart_ai_nudge",
+  critical_reason: "critical_risk_nudge",
   receipt_classify: "income_classification",
-  debt_readiness: "debt_readiness",
-  scam_message: "scam_check",
-  security_recommendation: "security",
+  debt_readiness: "flexicredit_debt_readiness",
+  scam_message: "scam_message_check",
+  security_recommendation: "security_risk_check",
   tree_health: "tree_health",
   mission_recommendation: "mission",
   smartscore_explanation: "smartscore",
@@ -223,10 +299,12 @@ export async function invokeSmartGxAiStructured(
   const body = JSON.stringify({
     success: res.success,
     provider: res.provider,
+    feature: res.feature,
     model: res.model,
     content: res.content,
     structured: res.structured,
     error: res.error,
+    fallbackReason: res.fallbackReason,
   });
 
   return new Response(body, {
