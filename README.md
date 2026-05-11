@@ -13,7 +13,7 @@ SmartGX extends GXBank’s digital banking foundation by adding a proactive fina
 ---
 ## 🎬 Prototype Demo Video
 
-🎥[Watch Our 5 minutes demo video HERE](https://youtu.be/8zM1xC5kqQ0?si=5xzUD95X2EAOJWQg)
+🎥[Watch Our 5 minutes demo video HERE](https://youtu.be/HW9YpOfzaoI)
 
 ---
 
