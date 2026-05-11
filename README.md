@@ -11,7 +11,17 @@ SmartGX extends GXBank’s digital banking foundation by adding a proactive fina
 **SmartGX builds on the GXBank digital banking experience with AI-powered financial resilience features that help young Malaysians save before spending, think before borrowing, build lasting financial habits, and stay protected before risk happens.**
 
 ---
+## 🎬 Prototype Demo Video
 
+🎥[Watch Our 5 minutes demo video HERE](https://your-video-link.com)
+
+---
+
+## 📊 Project Pitch Deck
+
+📑[View Our Project Pitch Deck HERE](https://drive.google.com/drive/folders/1GpYSdzXqdRjBM9Gvm09-OfSVC3LoYS63?usp=drive_link)
+
+---
 ## 📌 Project Context
 
 This project is developed for the **Youth Resilience Challenge** case study.
@@ -127,21 +137,6 @@ SmartGX focuses on helping young users make better financial decisions before ri
 - **Campaigns** such as saving challenges, round-up challenges, and debt-free campaigns
 - **Security Center** with 6-digit PIN setup, Device Safety Check, Scam Protection, and Emergency Lock
 - **SmartGX Assistant** with quick questions and AI-powered prompt support
-
----
-## 📸 Prototype Screenshots
-
-### Core Banking Experience
-
-| Dashboard | Saving & Automation | GXHealth |
-|---|---|---|
-| ![Dashboard](./smartgx/assets/screenshots/dashboard.png) | ![Saving & Automation](./smartgx/assets/screenshots/saving-automation.png) | ![GXHealth](./smartgx/assets/screenshots/gxhealth.png) |
-
-### AI, Debt Prevention & Engagement
-
-| AI Nudge | FlexiCredit Debt Readiness | Challenge Garden |
-|---|---|---|
-| ![AI Nudge](./smartgx/assets/screenshots/ai-nudge.png) | ![FlexiCredit Debt Readiness](./smartgx/assets/screenshots/flexicredit.png) | ![Challenge Garden](./smartgx/assets/screenshots/challenge-garden.png) |
 
 ---
 
