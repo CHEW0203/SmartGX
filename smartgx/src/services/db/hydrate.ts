@@ -207,7 +207,7 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
         approvedLimit: Number(flex.approved_limit),
         availableLimit: Number(flex.available_credit),
         outstanding: Number(flexState.outstanding ?? 0),
-        annualInterestRate: Number(flex.annual_interest_rate) / 100,
+        annualInterestRate: safeNumber(flex.annual_interest_rate, 6) / 100,
         autoRepaymentEnabled: Boolean(flex.auto_repayment_enabled),
         docs: (flex.documents ?? {}) as typeof useFlexiCreditStore extends { getState: () => { docs: infer D } } ? D : never,
         application: (flexState.application as typeof useFlexiCreditStore extends { getState: () => { application: infer A } } ? A : null) ?? null,
@@ -358,6 +358,13 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
     const gxRow = gxRes.data;
     const gxScore = gxRow ? normalizeScore(gxRow.score, 70) : 70;
 
+    if (streak) {
+      useGamificationStore.setState({
+        currentStreak: streak.current_streak,
+        longestStreak: Math.max(useGamificationStore.getState().longestStreak, streak.longest_streak),
+      });
+    }
+
     useGamificationStore.getState().syncFromData({
       activities: useActivityStore.getState().activities,
       gxHealthScore: gxScore,
@@ -368,14 +375,6 @@ export async function hydrateUserDataStores(userId: string): Promise<{ ok: true 
       debtPressure:
         useAccountStore.getState().flexiUsed + useFlexiCreditStore.getState().outstanding,
     });
-
-    if (streak) {
-      useGamificationStore.setState({
-        currentStreak: streak.current_streak,
-        longestStreak: Math.max(useGamificationStore.getState().longestStreak, streak.longest_streak),
-        monthlySavedAmount: Number(streak.saved_this_month),
-      });
-    }
 
     await useChallengeStore.getState().hydrateFromStorage();
     await useChallengeStore.getState().hydrateFromSupabase(userId);

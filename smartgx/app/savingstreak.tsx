@@ -169,7 +169,12 @@ export default function SavingStreakScreen() {
           {MILESTONES.map((m) => {
             const claimed = gamify.streakMilestonesClaimed.includes(m.id);
             const target = Number(m.id.split("-")[1]);
-            const remain = Number.isFinite(target) ? Math.max(0, target - gamify.currentStreak) : 0;
+            const isSaveMilestone = m.id.startsWith("save-");
+            const progress = isSaveMilestone ? gamify.monthlySavedAmount : gamify.currentStreak;
+            const remain = Number.isFinite(target) ? Math.max(0, target - progress) : 0;
+            const remainLabel = isSaveMilestone
+              ? `${formatRM(remain)} more to save`
+              : `${remain} more day${remain === 1 ? "" : "s"}`;
             return (
               <View key={m.id} style={s.row}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
@@ -177,7 +182,7 @@ export default function SavingStreakScreen() {
                   <Text style={s.rowSub}>
                     {claimed
                       ? `Reward ${formatRM(m.reward)} credited`
-                      : `Keep going: ${remain} more day${remain === 1 ? "" : "s"} to unlock ${formatRM(m.reward)} Bonus Reward.`}
+                      : `Keep going: ${remainLabel} to unlock ${formatRM(m.reward)} Bonus Reward.`}
                   </Text>
                 </View>
                 <Text style={claimed ? s.donePill : s.pendingPill}>{claimed ? "Auto Credited" : "In Progress"}</Text>

@@ -190,13 +190,26 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
   lastSyncedAt: null,
 
   syncFromData: ({ activities, gxHealthScore, totalSavings, debtPressure }) => {
-    const savedByDate: Record<string, number> = { ...get().savedByDate };
+    // Compute savedByDate fresh from activities (source of truth).
+    // Keep DB-hydrated values only for dates older than the oldest activity
+    // to avoid losing historical calendar data while preventing double-counting.
+    const fromActivities: Record<string, number> = {};
+    let oldestActivityDate: string | null = null;
     for (const a of activities) {
       if (!SAVING_ACTIVITY_TYPES.includes(a.type)) continue;
-      if (typeof a.amount !== "number") continue;
+      if (typeof a.amount !== "number" || a.amount <= 0) continue;
       const d = isoDay(a.timestamp);
-      savedByDate[d] = Math.round(((savedByDate[d] ?? 0) + a.amount) * 100) / 100;
+      fromActivities[d] = Math.round(((fromActivities[d] ?? 0) + a.amount) * 100) / 100;
+      if (!oldestActivityDate || d < oldestActivityDate) oldestActivityDate = d;
     }
+    const existingByDate = get().savedByDate;
+    const savedByDate: Record<string, number> = {};
+    if (oldestActivityDate) {
+      for (const [d, v] of Object.entries(existingByDate)) {
+        if (d < oldestActivityDate) savedByDate[d] = v;
+      }
+    }
+    Object.assign(savedByDate, fromActivities);
 
     const savedDays = Object.keys(savedByDate).filter((d) => savedByDate[d] >= 1).sort();
     const today = todayKey();

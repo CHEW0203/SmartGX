@@ -300,9 +300,11 @@ export default function SecurityScreen() {
           <Pressable style={s.secondaryBtn} onPress={sec.logoutOtherDevicesMock}>
             <Text style={s.secondaryBtnText}>Log out other sessions</Text>
           </Pressable>
-          <Pressable style={s.secondaryBtn} onPress={() => sec.setMockSuspiciousSession(!sec.mockSuspiciousSession)}>
-            <Text style={s.secondaryBtnText}>{sec.mockSuspiciousSession ? "Clear suspicious session flag" : "Simulate suspicious session"}</Text>
-          </Pressable>
+          {__DEV__ && (
+            <Pressable style={s.secondaryBtn} onPress={() => sec.setMockSuspiciousSession(!sec.mockSuspiciousSession)}>
+              <Text style={s.secondaryBtnText}>{sec.mockSuspiciousSession ? "Clear suspicious session flag" : "Simulate suspicious session"}</Text>
+            </Pressable>
+          )}
         </Section>
 
         <Section title="Device Safety Check">
